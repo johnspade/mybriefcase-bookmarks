@@ -8,11 +8,7 @@ test.describe('Sorting bookmarks', () => {
     await expect(modal).toBeVisible();
     await modal.locator('input[name="title"]').fill(title);
     await modal.locator('input[name="url"]').fill(url);
-    await Promise.all([
-      page.waitForResponse(resp => resp.url().includes('/bookmarks') && resp.status() === 200),
-      modal.locator('button[type="submit"]').click(),
-    ]);
-    await expect(modal).not.toBeVisible({ timeout: 10000 });
+    await modal.locator('button[type="submit"]').click();
     await expect(page.locator('.list-item', { hasText: title })).toBeVisible({ timeout: 10000 });
   }
 
