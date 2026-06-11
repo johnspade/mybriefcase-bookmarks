@@ -196,8 +196,14 @@ fn sort_order_from_param_defaults_to_name_asc() {
 
 #[test]
 fn sort_order_from_param_parses_all_variants() {
-    assert_eq!(SortOrder::from_param(Some("name_desc")), SortOrder::NameDesc);
-    assert_eq!(SortOrder::from_param(Some("date_desc")), SortOrder::DateDesc);
+    assert_eq!(
+        SortOrder::from_param(Some("name_desc")),
+        SortOrder::NameDesc
+    );
+    assert_eq!(
+        SortOrder::from_param(Some("date_desc")),
+        SortOrder::DateDesc
+    );
     assert_eq!(SortOrder::from_param(Some("date_asc")), SortOrder::DateAsc);
 }
 
@@ -264,8 +270,7 @@ async fn folder_content_sorts_by_name_desc() {
     create_bookmark_with_title(&app, &root_id, "Apple").await;
     create_bookmark_with_title(&app, &root_id, "Mango").await;
 
-    let (status, html) =
-        get_html(app, &format!("/folders/{root_id}/content?sort=name_desc")).await;
+    let (status, html) = get_html(app, &format!("/folders/{root_id}/content?sort=name_desc")).await;
     assert_eq!(status, StatusCode::OK);
 
     let apple_pos = html.find("Apple").unwrap();
@@ -288,8 +293,7 @@ async fn folder_content_sorts_by_date_desc() {
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     create_bookmark_with_title(&app, &root_id, "Mango").await;
 
-    let (status, html) =
-        get_html(app, &format!("/folders/{root_id}/content?sort=date_desc")).await;
+    let (status, html) = get_html(app, &format!("/folders/{root_id}/content?sort=date_desc")).await;
     assert_eq!(status, StatusCode::OK);
 
     let apple_pos = html.find("Apple").unwrap();
@@ -311,8 +315,7 @@ async fn folder_content_sorts_by_date_asc() {
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     create_bookmark_with_title(&app, &root_id, "Mango").await;
 
-    let (status, html) =
-        get_html(app, &format!("/folders/{root_id}/content?sort=date_asc")).await;
+    let (status, html) = get_html(app, &format!("/folders/{root_id}/content?sort=date_asc")).await;
     assert_eq!(status, StatusCode::OK);
 
     let apple_pos = html.find("Apple").unwrap();

@@ -431,11 +431,7 @@ fn build_folder_items(
     (folders, bookmarks)
 }
 
-fn sort_items(
-    folders: &mut [FolderItemView],
-    bookmarks: &mut [BookmarkItemView],
-    sort: SortOrder,
-) {
+fn sort_items(folders: &mut [FolderItemView], bookmarks: &mut [BookmarkItemView], sort: SortOrder) {
     use std::cmp::Reverse;
     match sort {
         SortOrder::NameAsc => {
