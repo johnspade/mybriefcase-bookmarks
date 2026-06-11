@@ -1,0 +1,54 @@
+{
+  "extends": ["html-validate:recommended"],
+  "rules": {
+    "require-sri": "off",
+    "attribute-boolean-style": "off",
+    "no-inline-style": "warn",
+    "wcag/h32": "error",
+    "wcag/h67": "error",
+    "no-raw-characters": "off"
+  },
+  "elements": [
+    "html5",
+    {
+      "alpine-attributes": {
+        "attributes": {
+          "x-data": {},
+          "x-init": {},
+          "x-show": {},
+          "x-bind:*": {},
+          "x-on:*": {},
+          "@*": {},
+          ":*": {},
+          "x-text": {},
+          "x-html": {},
+          "x-model": {},
+          "x-cloak": {},
+          "x-ref": {},
+          "x-if": {},
+          "x-for": {},
+          "x-transition": {}
+        }
+      },
+      "htmx-attributes": {
+        "attributes": {
+          "hx-get": {},
+          "hx-post": {},
+          "hx-put": {},
+          "hx-delete": {},
+          "hx-target": {},
+          "hx-swap": {},
+          "hx-trigger": {},
+          "hx-indicator": {},
+          "hx-push-url": {},
+          "hx-select": {},
+          "hx-vals": {},
+          "hx-boost": {},
+          "hx-include": {},
+          "hx-confirm": {},
+          "hx-encoding": {}
+        }
+      }
+    }
+  ]
+}

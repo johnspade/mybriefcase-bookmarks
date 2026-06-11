@@ -1,0 +1,66 @@
+[package]
+name = "automerge-playground"
+version = "0.0.1"
+edition = "2024"
+description = "Local-first bookmark manager with Automerge CRDT sync over Syncthing"
+license = "MIT"
+repository = "https://github.com/johnspade/automerge-playground"
+readme = "SPEC.md"
+keywords = ["automerge", "bookmarks", "crdt", "local-first"]
+categories = ["web-programming"]
+publish = false
+
+[lib]
+name = "automerge_playground"
+path = "src/lib.rs"
+
+[[bin]]
+name = "automerge-playground"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.79"
+askama = "0.12"
+askama_axum = "0.4"
+automerge = "0.7"
+automerge_repo = { version = "0.3", features = ["tokio"] }
+autosurgeon = { version = "0.9", features = ["uuid"] }
+axum = { version = "0.8.5", features = ["multipart"] }
+chrono = { version = "0.4", features = ["serde"] }
+scraper = "0.22"
+hostname = "0.4.1"
+notify = "6"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.27", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tower-http = { version = "0.6", features = ["catch-panic"] }
+uuid = { version = "1.18.1", features = ["v4"] }
+ego-tree = "0.10"
+rust-embed = { version = "8.11.0", features = ["axum-ex"] }
+axum-embed = "0.1.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_imports = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# Axum 0.8 requires async fn signatures for handlers, even when the body has no .await
+unused_async = "allow"
+# Too noisy for practical use
+module_name_repetitions = "allow"
+multiple_crate_versions = "allow"
+collapsible_if = "allow"
+collapsible_match = "allow"
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+futures-util = "0.3"
+reqwest = { version = "0.12", features = ["json", "stream"] }

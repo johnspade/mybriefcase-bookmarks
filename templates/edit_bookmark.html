@@ -1,0 +1,24 @@
+<h2>Edit Bookmark</h2>
+<form hx-post="/bookmarks/{{ id }}/edit" hx-target="#detail-body" hx-swap="innerHTML"
+      @htmx:after-request="$store.app.showEditModal = false"
+      x-init="htmx.process($el); $nextTick(() => $refs.editTitle.focus())">
+  <div class="detail-field">
+    <label>Name</label>
+    <input type="text" name="title" value="{{ title }}" x-ref="editTitle">
+  </div>
+  <div class="detail-field">
+    <label>URL</label>
+    <input type="text" name="url" value="{{ url }}">
+  </div>
+  <div class="detail-field">
+    <label>Notes</label>
+    <textarea name="notes" rows="4">{{ notes }}</textarea>
+  </div>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-ghost" @click="$store.app.showEditModal = false">Cancel</button>
+    <button type="submit" class="btn btn-primary">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save
+    </button>
+  </div>
+</form>
