@@ -194,6 +194,39 @@ body {
 .view-btn:hover { background: var(--hover-bg); color: var(--text); }
 .view-btn.active { background: var(--hover-bg); color: var(--text); }
 
+.view-settings { position: relative; }
+.settings-popover {
+  position: absolute; top: 100%; right: 0; margin-top: var(--space-1);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  padding: var(--space-3); min-width: 160px; z-index: 50;
+}
+.popover-section { display: flex; flex-direction: column; gap: var(--space-1); }
+.popover-label {
+  font-size: var(--text-2xs); font-weight: 600; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: 0.06em; padding: var(--space-1) var(--space-2);
+}
+.popover-row { display: flex; gap: var(--space-1); }
+.popover-btn {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-2); border-radius: var(--radius-md);
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: var(--text-xs);
+  transition: background var(--transition), color var(--transition);
+}
+.popover-btn:hover { background: var(--hover-bg); color: var(--text); }
+.popover-btn.active { background: var(--accent-light); color: var(--accent); }
+.popover-divider { height: 1px; background: var(--border-light); margin: var(--space-2) 0; }
+.sort-option {
+  display: block; width: 100%; text-align: left;
+  padding: var(--space-1-5) var(--space-2); border-radius: var(--radius-md);
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: var(--text-xs);
+  transition: background var(--transition), color var(--transition);
+}
+.sort-option:hover { background: var(--hover-bg); color: var(--text); }
+.sort-option.active { background: var(--accent-light); color: var(--accent); }
+
 .items-panel { flex: 1; overflow-y: auto; padding: var(--space-3) var(--space-4); }
 .items-panel::-webkit-scrollbar { width: 6px; }
 .items-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -471,6 +504,10 @@ body.drawer-open { overflow: hidden; }
   .view-btn { width: 40px; height: 40px; }
   .breadcrumb { height: 44px; }
   .view-toolbar { height: 44px; }
+
+  .sort-option { min-height: 44px; padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
+  .popover-btn { min-height: 44px; padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
+  .settings-popover { min-width: 180px; }
 
   .btn { min-height: 44px; padding: var(--space-3) var(--space-4); }
   .sidebar-action-btn { min-height: 44px; }

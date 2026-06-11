@@ -75,18 +75,28 @@ function initApp() {
   applyTheme(savedPref);
 
   const savedViewMode = localStorage.getItem('view-mode') || 'list';
+  const savedSortOrder = localStorage.getItem('sort-order') || 'name_asc';
 
   Alpine.store('app', {
     themePreference: savedPref,
     effectiveTheme: effectiveTheme,
     viewMode: savedViewMode,
+    sortOrder: savedSortOrder,
     showAddModal: false,
     showFolderModal: false,
     showImportModal: false,
     showEditModal: false,
     sidebarOpen: false,
     detailOpen: false,
-    searchExpanded: false
+    searchExpanded: false,
+    setSortOrder: function(order) {
+      Alpine.store('app').sortOrder = order;
+      var folderId = getCurrentFolderId();
+      if (folderId) {
+        htmx.ajax('GET', '/folders/' + folderId + '/content',
+                  {target: '#folder-content', swap: 'innerHTML'});
+      }
+    }
   });
 
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
@@ -107,6 +117,17 @@ function initApp() {
 
   Alpine.effect(function() {
     localStorage.setItem('view-mode', Alpine.store('app').viewMode);
+  });
+
+  Alpine.effect(function() {
+    localStorage.setItem('sort-order', Alpine.store('app').sortOrder);
+  });
+
+  document.body.addEventListener('htmx:configRequest', function(e) {
+    var path = e.detail.path || '';
+    if (path.match(/\/folders\/[^/]+\/content/) || path.match(/\/folders\/[^/]+$/) || path.match(/\/search/)) {
+      e.detail.parameters.sort = Alpine.store('app').sortOrder;
+    }
   });
 
   document.body.addEventListener('htmx:afterSwap', function(e) {
