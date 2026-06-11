@@ -30,8 +30,30 @@ pub struct BreadcrumbItem {
 pub struct FolderItemView {
     pub id: String,
     pub title: String,
+    pub updated_at: String,
     pub item_count: usize,
     pub bookmark_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortOrder {
+    #[default]
+    NameAsc,
+    NameDesc,
+    DateDesc,
+    DateAsc,
+}
+
+impl SortOrder {
+    #[must_use]
+    pub fn from_param(s: Option<&str>) -> Self {
+        match s {
+            Some("name_desc") => Self::NameDesc,
+            Some("date_desc") => Self::DateDesc,
+            Some("date_asc") => Self::DateAsc,
+            _ => Self::NameAsc,
+        }
+    }
 }
 
 pub struct BookmarkItemView {
@@ -91,11 +113,17 @@ pub struct MoveItemForm {
 #[derive(Deserialize)]
 pub struct SearchParams {
     q: String,
+    sort: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct SidebarParams {
     folder_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct FolderContentParams {
+    sort: Option<String>,
 }
 
 // ─── Templates ──────────────────────────────────────
@@ -354,6 +382,7 @@ fn build_sidebar_folder(
 fn build_folder_items(
     store: &BookmarkStore,
     folder_id: &str,
+    sort: SortOrder,
 ) -> (Vec<FolderItemView>, Vec<BookmarkItemView>) {
     let Some(folder) = store.folders.get(folder_id) else {
         return (vec![], vec![]);
@@ -376,6 +405,7 @@ fn build_folder_items(
                 folders.push(FolderItemView {
                     id: child_id.clone(),
                     title: sub.title.clone(),
+                    updated_at: sub.updated_at.clone(),
                     item_count,
                     bookmark_count: count_bookmarks_recursive(store, sub),
                 });
@@ -396,16 +426,38 @@ fn build_folder_items(
         }
     }
 
-    folders.sort_by_key(|f| f.title.to_lowercase());
-    bookmarks.sort_by_key(|b| b.title.to_lowercase());
+    sort_items(&mut folders, &mut bookmarks, sort);
 
     (folders, bookmarks)
+}
+
+fn sort_items(folders: &mut [FolderItemView], bookmarks: &mut [BookmarkItemView], sort: SortOrder) {
+    use std::cmp::Reverse;
+    match sort {
+        SortOrder::NameAsc => {
+            folders.sort_by_key(|f| f.title.to_lowercase());
+            bookmarks.sort_by_key(|b| b.title.to_lowercase());
+        }
+        SortOrder::NameDesc => {
+            folders.sort_by_key(|f| Reverse(f.title.to_lowercase()));
+            bookmarks.sort_by_key(|b| Reverse(b.title.to_lowercase()));
+        }
+        SortOrder::DateDesc => {
+            folders.sort_by_key(|f| Reverse(f.updated_at.clone()));
+            bookmarks.sort_by_key(|b| Reverse(b.created_at.clone()));
+        }
+        SortOrder::DateAsc => {
+            folders.sort_by_key(|f| f.updated_at.clone());
+            bookmarks.sort_by_key(|b| b.created_at.clone());
+        }
+    }
 }
 
 fn render_folder_response(
     state: &AppState,
     folder_id: &str,
     reset_detail: bool,
+    sort: SortOrder,
 ) -> Result<Html<String>, StatusCode> {
     let store = read_store(&state.doc_handle)?;
     let effective_id = if store.folders.contains_key(folder_id) {
@@ -415,7 +467,7 @@ fn render_folder_response(
     };
 
     let sidebar_html = build_sidebar_html(&store, &effective_id);
-    let (folders, bookmarks) = build_folder_items(&store, &effective_id);
+    let (folders, bookmarks) = build_folder_items(&store, &effective_id, sort);
     let breadcrumbs = build_breadcrumbs(&store, &effective_id);
     let folder_title = store
         .folders
@@ -464,12 +516,16 @@ fn find_folder_for_bookmark<'a>(store: &'a BookmarkStore, bookmark_id: &str) -> 
 
 /// # Errors
 /// Returns `500 Internal Server Error` if template rendering fails.
-pub async fn index_page(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
+pub async fn index_page(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<FolderContentParams>,
+) -> Result<Html<String>, StatusCode> {
+    let sort = SortOrder::from_param(params.sort.as_deref());
     let store = read_store(&state.doc_handle)?;
     let root_id = store.root_folder_id.clone();
 
     let sidebar_html = build_sidebar_html(&store, &root_id);
-    let (folders, bookmarks) = build_folder_items(&store, &root_id);
+    let (folders, bookmarks) = build_folder_items(&store, &root_id, sort);
     let breadcrumbs = build_breadcrumbs(&store, &root_id);
 
     let content_html = render(&FolderContentTemplate {
@@ -494,6 +550,7 @@ pub async fn index_page(State(state): State<Arc<AppState>>) -> Result<Html<Strin
 pub async fn index_page_for_folder(
     State(state): State<Arc<AppState>>,
     folder_id: &str,
+    sort: SortOrder,
 ) -> Result<Html<String>, StatusCode> {
     let store = read_store(&state.doc_handle)?;
     let effective_id = if store.folders.contains_key(folder_id) {
@@ -503,7 +560,7 @@ pub async fn index_page_for_folder(
     };
 
     let sidebar_html = build_sidebar_html(&store, &effective_id);
-    let (folders, bookmarks) = build_folder_items(&store, &effective_id);
+    let (folders, bookmarks) = build_folder_items(&store, &effective_id, sort);
     let breadcrumbs = build_breadcrumbs(&store, &effective_id);
     let folder_title = store
         .folders
@@ -533,20 +590,24 @@ pub async fn index_page_for_folder(
 pub async fn folder_content(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(params): Query<FolderContentParams>,
 ) -> Result<Html<String>, StatusCode> {
-    render_folder_response(&state, &id, false)
+    let sort = SortOrder::from_param(params.sort.as_deref());
+    render_folder_response(&state, &id, false, sort)
 }
 
 pub async fn dispatch_get_folder(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(params): Query<FolderContentParams>,
     headers: axum::http::HeaderMap,
 ) -> Response {
+    let sort = SortOrder::from_param(params.sort.as_deref());
     if headers.contains_key("hx-request") {
-        render_folder_response(&state, &id, true)
+        render_folder_response(&state, &id, true, sort)
             .map_or_else(IntoResponse::into_response, IntoResponse::into_response)
     } else {
-        index_page_for_folder(State(Arc::clone(&state)), &id)
+        index_page_for_folder(State(Arc::clone(&state)), &id, sort)
             .await
             .into_response()
     }
@@ -642,7 +703,7 @@ pub async fn create_folder_html(
     ops::create_folder(&state.doc_handle, &form.parent_folder_id, &form.title)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     after_write(&state);
-    render_folder_response(&state, &form.parent_folder_id, true)
+    render_folder_response(&state, &form.parent_folder_id, true, SortOrder::default())
 }
 
 /// # Errors
@@ -654,7 +715,7 @@ pub async fn create_bookmark_html(
     ops::add_bookmark(&state.doc_handle, &form.folder_id, &form.url, &form.title)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     after_write(&state);
-    render_folder_response(&state, &form.folder_id, true)
+    render_folder_response(&state, &form.folder_id, true, SortOrder::default())
 }
 
 /// # Errors
@@ -683,7 +744,7 @@ pub async fn update_bookmark_html(
         .unwrap_or(&store.root_folder_id)
         .to_string();
     let sidebar_html = build_sidebar_html(&store, &folder_id);
-    let (folders, bookmarks) = build_folder_items(&store, &folder_id);
+    let (folders, bookmarks) = build_folder_items(&store, &folder_id, SortOrder::default());
     let breadcrumbs = build_breadcrumbs(&store, &folder_id);
     let folder_title = store
         .folders
@@ -733,7 +794,7 @@ pub async fn delete_bookmark_html(
 ) -> Result<Html<String>, StatusCode> {
     ops::delete_bookmark(&state.doc_handle, &id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     after_write(&state);
-    render_folder_response(&state, &form.current_folder_id, true)
+    render_folder_response(&state, &form.current_folder_id, true, SortOrder::default())
 }
 
 /// # Errors
@@ -751,7 +812,7 @@ pub async fn delete_folder_html(
     } else {
         form.current_folder_id
     };
-    render_folder_response(&state, &target, true)
+    render_folder_response(&state, &target, true, SortOrder::default())
 }
 
 /// # Errors
@@ -764,7 +825,7 @@ pub async fn rename_folder_html(
     ops::rename_folder(&state.doc_handle, &id, &form.title)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     after_write(&state);
-    render_folder_response(&state, &form.current_folder_id, true)
+    render_folder_response(&state, &form.current_folder_id, true, SortOrder::default())
 }
 
 /// # Errors
@@ -781,7 +842,7 @@ pub async fn move_item_html(
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     after_write(&state);
-    render_folder_response(&state, &form.destination, true)
+    render_folder_response(&state, &form.destination, true, SortOrder::default())
 }
 
 /// # Errors
@@ -799,7 +860,7 @@ pub async fn sidebar_only(
 
     let folder = store.folders.get(&folder_id);
     let folder_title = folder.map_or("Bookmarks", |f| f.title.as_str());
-    let (folders, bookmarks) = build_folder_items(&store, &folder_id);
+    let (folders, bookmarks) = build_folder_items(&store, &folder_id, SortOrder::default());
     let total_items = folders.len() + bookmarks.len();
 
     Ok(Html(format!(
@@ -840,7 +901,9 @@ pub async fn search(
         })
         .collect();
 
-    matching.sort_by_key(|b| b.title.to_lowercase());
+    let sort = SortOrder::from_param(params.sort.as_deref());
+    let mut empty_folders: Vec<FolderItemView> = vec![];
+    sort_items(&mut empty_folders, &mut matching, sort);
 
     let search_title = format!("Search: \"{}\"", params.q);
     let root_id = store.root_folder_id;
@@ -983,7 +1046,7 @@ pub async fn revert_bookmark_html(
         .unwrap_or(&store.root_folder_id)
         .to_string();
     let sidebar_html = build_sidebar_html(&store, &folder_id);
-    let (folders, bookmarks) = build_folder_items(&store, &folder_id);
+    let (folders, bookmarks) = build_folder_items(&store, &folder_id, SortOrder::default());
     let breadcrumbs = build_breadcrumbs(&store, &folder_id);
     let folder_title = store
         .folders
@@ -1087,7 +1150,7 @@ pub async fn import_bookmarks_html(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     after_write(&state);
-    render_folder_response(&state, &target_folder_id, true)
+    render_folder_response(&state, &target_folder_id, true, SortOrder::default())
 }
 
 pub async fn sse_events(

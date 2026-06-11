@@ -24,9 +24,11 @@ uv run --with <packages> script.py
 
 Always use `MBB_PORT=0` when launching the server (lets the OS pick a free port). Never hardcode ports like 3000, 3001, etc. — other agents may be running in parallel. Read the actual port from stderr output.
 
-## Pull Requests with Frontend Changes
+## Pull Requests
 
-When a PR touches the frontend (HTML, CSS, JS, templates), attach before and after screenshots to the PR description. Add a comment highlighting what changed visually.
+PR descriptions must follow the template in `.github/pull_request_template.md`.
+
+When a PR touches the frontend (HTML, CSS, JS, templates), attach before and after screenshots for both desktop and mobile viewports. Use the Firefox devtools MCP (if available) for manual testing, debugging, and taking screenshots.
 
 ## Project Context
 

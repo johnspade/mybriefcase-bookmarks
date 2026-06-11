@@ -11,12 +11,34 @@
 
   <div class="flex-spacer"></div>
 
-  <button type="button" class="view-btn" :class="$store.app.viewMode === 'list' && 'active'" @click="$store.app.viewMode = 'list'" title="List view" aria-label="List view">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-  </button>
-  <button type="button" class="view-btn" :class="$store.app.viewMode === 'grid' && 'active'" @click="$store.app.viewMode = 'grid'" title="Grid view" aria-label="Grid view">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-  </button>
+  <div class="view-settings" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false">
+    <button type="button" class="view-btn" @click="open = !open" :class="open && 'active'" title="View settings" aria-label="View settings" aria-haspopup="true" :aria-expanded="open">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+    </button>
+    <div class="settings-popover" x-show="open" x-cloak x-transition.opacity @click.stop>
+      <div class="popover-section">
+        <span class="popover-label">View</span>
+        <div class="popover-row">
+          <button type="button" class="popover-btn" :class="$store.app.viewMode === 'list' && 'active'" @click="$store.app.viewMode = 'list'" aria-label="List view">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <span>List</span>
+          </button>
+          <button type="button" class="popover-btn" :class="$store.app.viewMode === 'grid' && 'active'" @click="$store.app.viewMode = 'grid'" aria-label="Grid view">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            <span>Grid</span>
+          </button>
+        </div>
+      </div>
+      <div class="popover-divider"></div>
+      <div class="popover-section">
+        <span class="popover-label">Sort by</span>
+        <button type="button" class="sort-option" :class="$store.app.sortOrder === 'name_asc' && 'active'" @click="$store.app.setSortOrder('name_asc'); open = false">Name A&#x2192;Z</button>
+        <button type="button" class="sort-option" :class="$store.app.sortOrder === 'name_desc' && 'active'" @click="$store.app.setSortOrder('name_desc'); open = false">Name Z&#x2192;A</button>
+        <button type="button" class="sort-option" :class="$store.app.sortOrder === 'date_desc' && 'active'" @click="$store.app.setSortOrder('date_desc'); open = false">Newest first</button>
+        <button type="button" class="sort-option" :class="$store.app.sortOrder === 'date_asc' && 'active'" @click="$store.app.setSortOrder('date_asc'); open = false">Oldest first</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="items-panel" id="items-panel">

@@ -14,6 +14,7 @@ use tower::ServiceExt;
 
 use common::new_initialized_doc;
 use mybriefcase_bookmarks::{api, views};
+use views::SortOrder;
 
 fn build_views_app() -> (Router, String) {
     let td = new_initialized_doc("test-views");
@@ -180,5 +181,148 @@ async fn update_bookmark_changes_updated_at() {
     assert!(
         time_count >= 2,
         "update response should contain at least 2 <time> elements (detail + list), got {time_count}"
+    );
+}
+
+// ─── Sort order tests ──────────────────────────────
+
+#[test]
+fn sort_order_from_param_defaults_to_name_asc() {
+    assert_eq!(SortOrder::from_param(None), SortOrder::NameAsc);
+    assert_eq!(SortOrder::from_param(Some("")), SortOrder::NameAsc);
+    assert_eq!(SortOrder::from_param(Some("invalid")), SortOrder::NameAsc);
+    assert_eq!(SortOrder::from_param(Some("name_asc")), SortOrder::NameAsc);
+}
+
+#[test]
+fn sort_order_from_param_parses_all_variants() {
+    assert_eq!(
+        SortOrder::from_param(Some("name_desc")),
+        SortOrder::NameDesc
+    );
+    assert_eq!(
+        SortOrder::from_param(Some("date_desc")),
+        SortOrder::DateDesc
+    );
+    assert_eq!(SortOrder::from_param(Some("date_asc")), SortOrder::DateAsc);
+}
+
+async fn create_bookmark_with_title(app: &Router, root_id: &str, title: &str) -> String {
+    let encoded_title: String = title
+        .bytes()
+        .flat_map(|b| {
+            if b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.' || b == b'~' {
+                vec![b as char]
+            } else {
+                format!("%{b:02X}").chars().collect()
+            }
+        })
+        .collect();
+    let body = format!(
+        "folder_id={}&url=https%3A%2F%2F{}.example.com&title={}",
+        root_id,
+        title.to_lowercase().replace(' ', "-"),
+        encoded_title
+    );
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/bookmarks/new")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8_lossy(&bytes).to_string();
+    let marker = "hx-get=\"/bookmarks/";
+    let start = html.find(marker).expect("bookmark id in response") + marker.len();
+    let end = html[start..].find('/').unwrap() + start;
+    html[start..end].to_string()
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_sorts_by_name_asc_by_default() {
+    let (app, root_id) = build_views_app();
+    create_bookmark_with_title(&app, &root_id, "Zebra").await;
+    create_bookmark_with_title(&app, &root_id, "Apple").await;
+    create_bookmark_with_title(&app, &root_id, "Mango").await;
+
+    let (status, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let apple_pos = html.find("Apple").unwrap();
+    let mango_pos = html.find("Mango").unwrap();
+    let zebra_pos = html.find("Zebra").unwrap();
+    assert!(
+        apple_pos < mango_pos && mango_pos < zebra_pos,
+        "Default sort should be name A→Z"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_sorts_by_name_desc() {
+    let (app, root_id) = build_views_app();
+    create_bookmark_with_title(&app, &root_id, "Zebra").await;
+    create_bookmark_with_title(&app, &root_id, "Apple").await;
+    create_bookmark_with_title(&app, &root_id, "Mango").await;
+
+    let (status, html) = get_html(app, &format!("/folders/{root_id}/content?sort=name_desc")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let apple_pos = html.find("Apple").unwrap();
+    let mango_pos = html.find("Mango").unwrap();
+    let zebra_pos = html.find("Zebra").unwrap();
+    assert!(
+        zebra_pos < mango_pos && mango_pos < apple_pos,
+        "sort=name_desc should be Z→A"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_sorts_by_date_desc() {
+    let (app, root_id) = build_views_app();
+    // Created in order: Zebra, Apple, Mango — Mango is newest
+    create_bookmark_with_title(&app, &root_id, "Zebra").await;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    create_bookmark_with_title(&app, &root_id, "Apple").await;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    create_bookmark_with_title(&app, &root_id, "Mango").await;
+
+    let (status, html) = get_html(app, &format!("/folders/{root_id}/content?sort=date_desc")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let apple_pos = html.find("Apple").unwrap();
+    let mango_pos = html.find("Mango").unwrap();
+    let zebra_pos = html.find("Zebra").unwrap();
+    assert!(
+        mango_pos < apple_pos && apple_pos < zebra_pos,
+        "sort=date_desc should show newest first (Mango < Apple < Zebra)"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_sorts_by_date_asc() {
+    let (app, root_id) = build_views_app();
+    create_bookmark_with_title(&app, &root_id, "Zebra").await;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    create_bookmark_with_title(&app, &root_id, "Apple").await;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    create_bookmark_with_title(&app, &root_id, "Mango").await;
+
+    let (status, html) = get_html(app, &format!("/folders/{root_id}/content?sort=date_asc")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let apple_pos = html.find("Apple").unwrap();
+    let mango_pos = html.find("Mango").unwrap();
+    let zebra_pos = html.find("Zebra").unwrap();
+    assert!(
+        zebra_pos < apple_pos && apple_pos < mango_pos,
+        "sort=date_asc should show oldest first (Zebra < Apple < Mango)"
     );
 }

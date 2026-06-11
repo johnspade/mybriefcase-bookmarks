@@ -10,8 +10,9 @@ test.describe('View mode persistence', () => {
   test('persists grid view across reloads', async ({ serverPage: page }) => {
     await page.goto('/');
 
-    // Switch to grid view
-    await page.locator('button[title="Grid view"]').click();
+    // Switch to grid view via settings popover
+    await page.locator('button[title="View settings"]').click();
+    await page.locator('.popover-btn', { hasText: 'Grid' }).click();
     await expect(page.locator('.items-grid')).toBeVisible();
     await expect(page.locator('.items-list')).not.toBeVisible();
 
@@ -25,8 +26,12 @@ test.describe('View mode persistence', () => {
     await page.goto('/');
 
     // Switch to grid then back to list
-    await page.locator('button[title="Grid view"]').click();
-    await page.locator('button[title="List view"]').click();
+    await page.locator('button[title="View settings"]').click();
+    await page.locator('.popover-btn', { hasText: 'Grid' }).click();
+    await expect(page.locator('.items-grid')).toBeVisible();
+
+    await page.locator('button[title="View settings"]').click();
+    await page.locator('.popover-btn', { hasText: 'List' }).click();
     await expect(page.locator('.items-list')).toBeVisible();
 
     // Reload and verify list view persists
