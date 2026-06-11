@@ -199,29 +199,30 @@ body {
   position: absolute; top: 100%; right: 0; margin-top: var(--space-1);
   background: var(--surface-2); border: 1px solid var(--border);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
-  padding: var(--space-3); min-width: 160px; z-index: 50;
+  padding: var(--space-1-5); min-width: 120px; z-index: 50;
+  font-size: 0.75rem;
 }
-.popover-section { display: flex; flex-direction: column; gap: var(--space-1); }
+.popover-section { display: flex; flex-direction: column; gap: 2px; }
 .popover-label {
-  font-size: var(--text-2xs); font-weight: 600; color: var(--text-faint);
-  text-transform: uppercase; letter-spacing: 0.06em; padding: var(--space-1) var(--space-2);
+  font-size: 0.6875rem; font-weight: 600; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: 0.06em; padding: 2px var(--space-1-5);
 }
 .popover-row { display: flex; gap: var(--space-1); }
 .popover-btn {
-  display: flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-1-5) var(--space-2); border-radius: var(--radius-md);
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px var(--space-1-5); border-radius: var(--radius-md);
   background: none; border: none; color: var(--text-muted);
-  cursor: pointer; font-size: var(--text-xs);
+  cursor: pointer; font-size: inherit;
   transition: background var(--transition), color var(--transition);
 }
 .popover-btn:hover { background: var(--hover-bg); color: var(--text); }
 .popover-btn.active { background: var(--accent-light); color: var(--accent); }
-.popover-divider { height: 1px; background: var(--border-light); margin: var(--space-2) 0; }
+.popover-divider { height: 1px; background: var(--border-light); margin: var(--space-1) 0; }
 .sort-option {
   display: block; width: 100%; text-align: left;
-  padding: var(--space-1-5) var(--space-2); border-radius: var(--radius-md);
+  padding: 3px var(--space-1-5); border-radius: var(--radius-md);
   background: none; border: none; color: var(--text-muted);
-  cursor: pointer; font-size: var(--text-xs);
+  cursor: pointer; font-size: inherit;
   transition: background var(--transition), color var(--transition);
 }
 .sort-option:hover { background: var(--hover-bg); color: var(--text); }

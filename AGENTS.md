@@ -26,7 +26,7 @@ Always use `MBB_PORT=0` when launching the server (lets the OS pick a free port)
 
 ## Pull Requests with Frontend Changes
 
-When a PR touches the frontend (HTML, CSS, JS, templates), attach before and after screenshots to the PR description. Add a comment highlighting what changed visually.
+When a PR touches the frontend (HTML, CSS, JS, templates), attach before and after screenshots to the PR description. Add a comment highlighting what changed visually. Use the Firefox devtools MCP (if available) for manual testing, debugging, and taking screenshots.
 
 ## Project Context
 
