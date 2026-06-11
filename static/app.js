@@ -1,0 +1,228 @@
+/* exported getCurrentFolderId, toggleChevron, toggleTheme, trapFocus, openNewFolderPrompt, initApp, formatLocalDates */
+
+function getCurrentFolderId() {
+  const el = document.getElementById('current-folder-id');
+  return el ? el.value : document.body.dataset.folderId || '';
+}
+
+function toggleChevron(el) {
+  el.classList.toggle('open');
+  const sibling = el.closest('.tree-item').nextElementSibling;
+  if (sibling && sibling.classList.contains('tree-children')) {
+    sibling.classList.toggle('open');
+  }
+}
+
+function getSystemTheme() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function applyTheme(preference) {
+  if (preference === 'system') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', preference);
+  }
+  const store = Alpine.store('app');
+  if (store) store.effectiveTheme = (preference === 'system') ? getSystemTheme() : preference;
+}
+
+function toggleTheme() {
+  const store = Alpine.store('app');
+  const cycle = { system: 'light', light: 'dark', dark: 'system' };
+  const next = cycle[store.themePreference] || 'system';
+  store.themePreference = next;
+  localStorage.setItem('theme-preference', next);
+  applyTheme(next);
+}
+
+function trapFocus(e) {
+  const modal = e.currentTarget;
+  const focusable = modal.querySelectorAll(
+    'input:not([type="hidden"]):not([disabled]), button:not([disabled]), textarea, select, a[href], [tabindex]:not([tabindex="-1"])'
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey) {
+    if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+  } else {
+    if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+}
+
+function openNewFolderPrompt() {
+  Alpine.store('app').showFolderModal = true;
+}
+
+function formatLocalDates() {
+  const times = document.querySelectorAll('time[datetime]');
+  times.forEach(function(el) {
+    const iso = el.getAttribute('datetime');
+    if (!iso) return;
+    const date = new Date(iso);
+    if (isNaN(date.getTime())) return;
+    const opts = el.getAttribute('data-format') === 'long'
+      ? { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }
+      : { month: 'short', day: 'numeric', year: 'numeric' };
+    el.textContent = new Intl.DateTimeFormat(undefined, opts).format(date);
+  });
+}
+
+function initApp() {
+  const savedPref = localStorage.getItem('theme-preference') || 'system';
+  const effectiveTheme = (savedPref === 'system') ? getSystemTheme() : savedPref;
+  applyTheme(savedPref);
+
+  const savedViewMode = localStorage.getItem('view-mode') || 'list';
+
+  Alpine.store('app', {
+    themePreference: savedPref,
+    effectiveTheme: effectiveTheme,
+    viewMode: savedViewMode,
+    showAddModal: false,
+    showFolderModal: false,
+    showImportModal: false,
+    showEditModal: false,
+    sidebarOpen: false,
+    detailOpen: false,
+    searchExpanded: false
+  });
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+    const store = Alpine.store('app');
+    if (store.themePreference === 'system') {
+      store.effectiveTheme = getSystemTheme();
+    }
+  });
+
+  function isMobile() { return window.innerWidth <= 768; }
+
+  function updateDrawerOpenClass() {
+    const store = Alpine.store('app');
+    document.body.classList.toggle('drawer-open', store.sidebarOpen || store.detailOpen);
+  }
+
+  Alpine.effect(updateDrawerOpenClass);
+
+  Alpine.effect(function() {
+    localStorage.setItem('view-mode', Alpine.store('app').viewMode);
+  });
+
+  document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'detail-body' && isMobile()) {
+      Alpine.store('app').detailOpen = true;
+    }
+  });
+
+  document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'folder-content' && isMobile()) {
+      Alpine.store('app').sidebarOpen = false;
+    }
+  });
+
+  document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'edit-modal-body') {
+      Alpine.store('app').showEditModal = true;
+    }
+  });
+
+  const searchBar = document.querySelector('.search-bar');
+  const searchInput = document.getElementById('searchInput');
+  if (searchBar) {
+    searchBar.addEventListener('click', function() {
+      if (isMobile() && !searchBar.classList.contains('expanded')) {
+        searchBar.classList.add('expanded');
+        searchInput.focus();
+      }
+    });
+    searchInput.addEventListener('blur', function() {
+      if (isMobile() && !searchInput.value) {
+        searchBar.classList.remove('expanded');
+      }
+    });
+  }
+
+  formatLocalDates();
+  document.body.addEventListener('htmx:afterSettle', formatLocalDates);
+
+  (function() {
+    let retryDelay = 1000;
+    const maxRetryDelay = 30000;
+    let pendingRefresh = null;
+
+    function cancelPendingRefresh() {
+      if (pendingRefresh) {
+        clearTimeout(pendingRefresh);
+        pendingRefresh = null;
+      }
+    }
+
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+      if (e.detail.target && e.detail.target.id === 'folder-content') {
+        cancelPendingRefresh();
+      }
+    });
+
+    document.body.addEventListener('htmx:beforeRequest', function(e) {
+      const fc = document.getElementById('folder-content');
+      if (fc && fc.contains(e.detail.elt)) {
+        cancelPendingRefresh();
+      }
+    });
+
+    function connectSSE() {
+      const evtSource = new EventSource('/events');
+
+      evtSource.addEventListener('refresh', function() {
+        retryDelay = 1000;
+        const folderId = getCurrentFolderId();
+
+        const statusEl = document.getElementById('status-text');
+        if (statusEl) statusEl.textContent = 'Syncing\u2026';
+
+        htmx.ajax('GET', '/sidebar' + (folderId ? '?folder_id=' + encodeURIComponent(folderId) : ''),
+                  {target: '#sidebar-tree', swap: 'innerHTML'});
+
+        if (folderId) {
+          cancelPendingRefresh();
+          pendingRefresh = setTimeout(function() {
+            pendingRefresh = null;
+            htmx.ajax('GET', '/folders/' + folderId + '/content',
+                      {target: '#folder-content', swap: 'innerHTML'});
+          }, 300);
+        }
+      });
+
+      evtSource.onerror = function() {
+        evtSource.close();
+        setTimeout(connectSSE, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
+      };
+    }
+
+    connectSSE();
+  })();
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Escape') {
+    Alpine.store('app').showAddModal = false;
+    Alpine.store('app').showFolderModal = false;
+    Alpine.store('app').showImportModal = false;
+    Alpine.store('app').showEditModal = false;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
+    e.preventDefault();
+    Alpine.store('app').showAddModal = true;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+    e.preventDefault();
+    openNewFolderPrompt();
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+    e.preventDefault();
+    document.getElementById('searchInput').focus();
+  }
+});

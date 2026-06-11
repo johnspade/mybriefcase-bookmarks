@@ -1,0 +1,26 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "plugins": ["stylelint-declaration-strict-value"],
+  "rules": {
+    "declaration-property-unit-disallowed-list": {
+      "font-size": ["px"],
+      "line-height": ["px"]
+    },
+    "scale-unlimited/declaration-strict-value": [
+      ["/margin/", "/padding/", "font-size", "gap"],
+      {
+        "ignoreValues": ["0", "1px", "auto"],
+        "expandShorthand": true,
+        "recurseLonghand": true
+      }
+    ],
+    "color-named": "never",
+    "color-no-invalid-hex": true,
+    "declaration-block-no-duplicate-properties": true,
+    "no-descending-specificity": true,
+    "declaration-block-single-line-max-declarations": null,
+    "rule-empty-line-before": null,
+    "at-rule-empty-line-before": null,
+    "value-keyword-case": null
+  }
+}

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ page_title }}</title>
+<meta name="description" content="MyBriefcase Bookmarks — local-first bookmark manager with Automerge CRDT sync">
+<script src="/static/vendor/htmx.min.js"></script>
+<script defer src="/static/vendor/alpine.min.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+<script>
+(function() {
+  var p = localStorage.getItem('theme-preference');
+  if (p === 'light' || p === 'dark') document.documentElement.setAttribute('data-theme', p);
+})();
+</script>
+</head>
+<body x-data x-init="initApp()" data-folder-id="{{ current_folder_id }}">
+
+<div class="toolbar">
+  <button type="button" class="mobile-toggle" title="Menu" aria-label="Menu" @click="$store.app.sidebarOpen = !$store.app.sidebarOpen">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <button type="button" class="toolbar-btn" title="Back" aria-label="Back" onclick="history.back()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+  <button type="button" class="toolbar-btn" title="Forward" aria-label="Forward" onclick="history.forward()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+  </button>
+  <div class="toolbar-sep"></div>
+
+  <div class="search-bar">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" placeholder="Search bookmarks…" id="searchInput"
+           hx-get="/search" hx-target="#folder-content" hx-swap="innerHTML"
+           hx-trigger="keyup changed delay:300ms" hx-include="this" name="q">
+  </div>
+
+  <div class="toolbar-spacer"></div>
+
+  <button type="button" class="mobile-toggle" title="Info" aria-label="Info" @click="$store.app.detailOpen = !$store.app.detailOpen">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+  </button>
+  <div class="toolbar-sep"></div>
+  <button type="button" class="theme-btn" @click="toggleTheme()" :title="'Theme: ' + $store.app.themePreference" aria-label="Toggle theme" :aria-label="'Theme: ' + $store.app.themePreference">
+    <svg x-cloak x-show="$store.app.themePreference === 'system'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    <svg x-cloak x-show="$store.app.themePreference === 'light'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <svg x-cloak x-show="$store.app.themePreference === 'dark'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div>
+
+<main class="app-body">
+  <div class="drawer-backdrop" :class="($store.app.sidebarOpen || $store.app.detailOpen) && 'visible'" @click="$store.app.sidebarOpen = false; $store.app.detailOpen = false"></div>
+  <div class="sidebar" :class="$store.app.sidebarOpen && 'open'">
+    <div class="sidebar-header">Bookmarks</div>
+    <div class="sidebar-tree" id="sidebar-tree">{{ sidebar_html|safe }}</div>
+    <div class="sidebar-footer">
+      <button type="button" class="sidebar-action-btn" @click="$store.app.sidebarOpen = false; $store.app.showImportModal = true">Import Bookmarks</button>
+      <a class="sidebar-action-btn" href="/export" download="bookmarks.html">Export Bookmarks</a>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div id="folder-content">{{ content_html|safe }}</div>
+    <div class="fab-container" x-data="{ open: false }">
+      <div class="fab-menu" x-show="open" x-cloak x-transition.opacity.duration.150ms @click.outside="open = false">
+        <button type="button" class="fab-menu-item" @click="open = false; openNewFolderPrompt()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+          New Folder
+        </button>
+        <button type="button" class="fab-menu-item" @click="open = false; $store.app.showAddModal = true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
+          New Bookmark
+        </button>
+      </div>
+      <button type="button" class="fab-btn" @click="open = !open" aria-label="Create new" :aria-label="open ? 'Close menu' : 'Create new'" :aria-expanded="open">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true" :style="open && 'transform:rotate(45deg)'"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="detail-panel" :class="$store.app.detailOpen && 'open'" id="detail-panel">
+    <div class="detail-header">
+      Info
+      <button type="button" class="detail-close" aria-label="Close detail panel" @click="$store.app.detailOpen = false" onclick="document.getElementById('detail-body').innerHTML='<div class=\'detail-empty\'><svg width=\'32\' height=\'32\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.5\'><circle cx=\'12\' cy=\'12\' r=\'10\'/><line x1=\'12\' y1=\'8\' x2=\'12\' y2=\'12\'/><line x1=\'12\' y1=\'16\' x2=\'12.01\' y2=\'16\'/></svg><p>Select a bookmark or folder to view and edit its details.</p></div>';document.querySelectorAll('.list-item').forEach(e=>e.classList.remove('selected'))">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="detail-body" id="detail-body">
+      <div class="detail-empty">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <p>Select a bookmark or folder to view and edit its details.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="statusbar">
+  <span id="status-text">Ready</span>
+  <span class="status-count" id="status-count"></span>
+</div>
+
+<!-- Add Bookmark Modal -->
+<template x-if="$store.app.showAddModal">
+  <div class="modal-overlay" @click.self="$store.app.showAddModal = false" @keydown.escape.window="$store.app.showAddModal = false">
+    <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="add-bookmark-title" @keydown.tab="trapFocus($event)">
+      <h2 id="add-bookmark-title">Add Bookmark</h2>
+      <form hx-post="/bookmarks/new" hx-target="#folder-content" hx-swap="innerHTML"
+            @htmx:after-request="$store.app.showAddModal = false"
+            x-init="htmx.process($el); $nextTick(() => $refs.modalName.focus())">
+        <input type="hidden" name="folder_id" :value="getCurrentFolderId()">
+        <div class="detail-field">
+          <label>Name</label>
+          <input type="text" name="title" placeholder="Bookmark name" required x-ref="modalName">
+        </div>
+        <div class="detail-field">
+          <label>URL</label>
+          <input type="text" name="url" placeholder="https://example.com" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="$store.app.showAddModal = false">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</template>
+
+<!-- New Folder Modal -->
+<template x-if="$store.app.showFolderModal">
+  <div class="modal-overlay" @click.self="$store.app.showFolderModal = false" @keydown.escape.window="$store.app.showFolderModal = false">
+    <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="new-folder-title" @keydown.tab="trapFocus($event)">
+      <h2 id="new-folder-title">New Folder</h2>
+      <form hx-post="/folders/new" hx-target="#folder-content" hx-swap="innerHTML"
+            @htmx:after-request="$store.app.showFolderModal = false"
+            x-init="htmx.process($el); $nextTick(() => $refs.folderName.focus())">
+        <input type="hidden" name="parent_folder_id" :value="getCurrentFolderId()">
+        <div class="detail-field">
+          <label>Folder name</label>
+          <input type="text" name="title" placeholder="My Folder" required x-ref="folderName">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="$store.app.showFolderModal = false">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</template>
+
+<!-- Import Bookmarks Modal -->
+<template x-if="$store.app.showImportModal">
+  <div class="modal-overlay" @click.self="$store.app.showImportModal = false" @keydown.escape.window="$store.app.showImportModal = false">
+    <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="import-title" @keydown.tab="trapFocus($event)">
+      <h2 id="import-title">Import Bookmarks</h2>
+      <form hx-post="/import" hx-target="#folder-content" hx-swap="innerHTML"
+            hx-encoding="multipart/form-data"
+            @htmx:after-request="$store.app.showImportModal = false"
+            x-init="htmx.process($el); $nextTick(() => $refs.importFile.focus())">
+        <input type="hidden" name="folder_id" :value="getCurrentFolderId()">
+        <div class="detail-field">
+          <label>Import to</label>
+          <select name="target">
+            <option value="root">Root folder</option>
+            <option value="current">Current folder</option>
+            <option value="new">New "Imported" folder</option>
+          </select>
+        </div>
+        <div class="detail-field">
+          <label>HTML Bookmarks File</label>
+          <input type="file" name="file" accept=".html,.htm" required x-ref="importFile">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="$store.app.showImportModal = false">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</template>
+
+<!-- Edit Bookmark Modal -->
+<div class="modal-overlay" x-show="$store.app.showEditModal" x-cloak
+     @click.self="$store.app.showEditModal = false" @keydown.escape.window="$store.app.showEditModal && ($store.app.showEditModal = false)">
+  <div class="modal edit-modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="edit-bookmark-title" @keydown.tab="trapFocus($event)">
+    <div id="edit-modal-body"></div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

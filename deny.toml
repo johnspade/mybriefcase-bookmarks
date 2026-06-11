@@ -1,0 +1,51 @@
+[graph]
+targets = []
+all-features = true
+
+[output]
+feature-depth = 1
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "simplest-path"
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "OpenSSL",
+    "Zlib",
+    "MPL-2.0",
+    "BlueOak-1.0.0",
+]
+
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[licenses.private]
+ignore = false
+
+[advisories]
+ignore = [
+    # fxhash is unmaintained but it's a transitive dep of automerge 0.6.x — no upgrade path
+    "RUSTSEC-2025-0057",
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "allow"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+    "https://github.com/automerge/automerge-repo-rs",
+]

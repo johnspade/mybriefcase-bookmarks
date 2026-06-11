@@ -1,0 +1,84 @@
+<input type="hidden" id="current-folder-id" name="current_folder_id" value="{{ folder_id }}">
+
+<div class="breadcrumb" id="breadcrumb">
+{% for bc in breadcrumbs %}{% if !bc.is_last %}<span hx-get="/folders/{{ bc.id }}" hx-target="#folder-content" hx-swap="innerHTML" hx-push-url="/folders/{{ bc.id }}">{{ bc.title }}</span><span class="breadcrumb-sep">›</span>{% else %}<span>{{ bc.title }}</span>{% endif %}{% endfor %}
+</div>
+
+<div class="view-toolbar">
+  <span class="view-label" id="view-label">
+    {{ folders.len() }} folder{% if folders.len() != 1 %}s{% endif %}, {{ bookmarks.len() }} bookmark{% if bookmarks.len() != 1 %}s{% endif %}
+  </span>
+
+  <div class="flex-spacer"></div>
+
+  <button type="button" class="view-btn" :class="$store.app.viewMode === 'list' && 'active'" @click="$store.app.viewMode = 'list'" title="List view" aria-label="List view">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+  </button>
+  <button type="button" class="view-btn" :class="$store.app.viewMode === 'grid' && 'active'" @click="$store.app.viewMode = 'grid'" title="Grid view" aria-label="Grid view">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+  </button>
+</div>
+
+<div class="items-panel" id="items-panel">
+{% if folders.is_empty() && bookmarks.is_empty() %}
+  <div class="detail-empty">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    <p>This folder is empty.<br>Add a bookmark or create a subfolder.</p>
+    <button type="button" class="btn btn-primary" @click="$store.app.showAddModal = true">Add Bookmark</button>
+  </div>
+{% else %}
+  <div class="items-list" x-show="$store.app.viewMode === 'list'">
+  {% if !folders.is_empty() %}
+    <div class="list-section-header">Folders</div>
+    {% for f in folders %}
+    <div class="list-item" data-item-id="{{ f.id }}" hx-get="/folders/{{ f.id }}" hx-target="#folder-content" hx-swap="innerHTML" hx-push-url="/folders/{{ f.id }}">
+      <div class="item-icon-wrap"><svg width="16" height="16" viewBox="0 0 24 24" fill="var(--folder-color)" stroke="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+      <span class="item-name">{{ f.title }}</span>
+      <span class="item-url">{{ f.item_count }} item{% if f.item_count != 1 %}s{% endif %}</span>
+      <div class="item-actions">
+        <button type="button" class="item-action-btn" title="Delete" aria-label="Delete folder" onclick="event.stopPropagation()" hx-post="/folders/{{ f.id }}/remove" hx-target="#folder-content" hx-swap="innerHTML" hx-include="#current-folder-id" hx-confirm="Delete this folder?">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+      <span class="item-date">{{ f.bookmark_count }} bookmarks</span>
+    </div>
+    {% endfor %}
+  {% endif %}
+  {% if !bookmarks.is_empty() %}
+    <div class="list-section-header">Bookmarks</div>
+    {% for b in bookmarks %}
+    <div class="list-item" data-item-id="{{ b.id }}" hx-get="/bookmarks/{{ b.id }}/detail" hx-target="#detail-body" hx-swap="innerHTML" onclick="document.querySelectorAll('.list-item').forEach(e=>e.classList.remove('selected'));this.classList.add('selected')">
+      <div class="item-icon-wrap"><span class="favicon" :style="'background:' + '{{ b.domain_color }}'">{{ b.domain_letter }}</span></div>
+      <span class="item-name">{{ b.title }}</span>
+      <span class="item-url">{{ b.url }}</span>
+      <div class="item-actions">
+        <button type="button" class="item-action-btn" title="Open" aria-label="Open bookmark" onclick="event.stopPropagation();window.open('{{ b.url }}','_blank')">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </button>
+        <button type="button" class="item-action-btn" title="Delete" aria-label="Delete bookmark" onclick="event.stopPropagation()" hx-post="/bookmarks/{{ b.id }}/remove" hx-target="#folder-content" hx-swap="innerHTML" hx-include="#current-folder-id" hx-confirm="Delete this bookmark?">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+      <span class="item-date"><time datetime="{{ b.created_at }}" data-format="short">{{ b.created_date }}</time></span>
+    </div>
+    {% endfor %}
+  {% endif %}
+  </div>
+
+  <div class="items-grid" x-show="$store.app.viewMode === 'grid'" x-cloak>
+  {% for f in folders %}
+    <div class="grid-item" hx-get="/folders/{{ f.id }}" hx-target="#folder-content" hx-swap="innerHTML" hx-push-url="/folders/{{ f.id }}" title="{{ f.title }}">
+      <div class="grid-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="var(--folder-color)" stroke="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+      <span class="grid-label">{{ f.title }}</span>
+    </div>
+  {% endfor %}
+  {% for b in bookmarks %}
+    <div class="grid-item" hx-get="/bookmarks/{{ b.id }}/detail" hx-target="#detail-body" hx-swap="innerHTML" title="{{ b.title }}">
+      <div class="grid-icon"><span class="favicon favicon-xl" :style="'background:' + '{{ b.domain_color }}'">{{ b.domain_letter }}</span></div>
+      <span class="grid-label">{{ b.title }}</span>
+      <span class="grid-url">{{ b.url }}</span>
+    </div>
+  {% endfor %}
+  </div>
+{% endif %}
+</div>

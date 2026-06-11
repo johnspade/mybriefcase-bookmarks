@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - run: rustup show
+      - run: cargo fmt --all --check
+
+  deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2
+
+  lint-frontend:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx stylelint "static/**/*.css"
+      - run: npx html-validate "templates/**/*.html"
+      - run: npx eslint "static/**/*.js" --no-error-on-unmatched-pattern
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    needs: [fmt, deny]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo clippy --all-targets --all-features
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [fmt, deny]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo test --all-features
+
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo doc --no-deps --all-features
+
+  miri:
+    name: Miri
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo +nightly miri test
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - run: rustup show
+      - run: cargo install cargo-audit
+      - run: cargo audit
+
+  e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: [test, clippy, lint-frontend]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo build --release
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        working-directory: e2e
+        run: npm ci
+      - name: Install Playwright browsers
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Run E2E tests
+        working-directory: e2e
+        run: npx playwright test
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    needs: [clippy, test, doc, miri, audit, e2e, lint-frontend]
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
+        with:
+          use-flakehub: false
+      - run: nix build .#docker
+      - name: Smoke test
+        run: |
+          docker load < result
+          docker run -d --name smoke-test -p 3000:3000 mybriefcase-bookmarks:latest
+          timeout 30 sh -c 'until curl -sf http://localhost:3000/ | grep -q "MyBriefcase Bookmarks"; do sleep 1; done'
+          docker stop smoke-test
+      - name: Push to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+          docker tag mybriefcase-bookmarks:latest "$REGISTRY/$IMAGE_NAME:${{ github.sha }}"
+          docker tag mybriefcase-bookmarks:latest "$REGISTRY/$IMAGE_NAME:latest"
+          docker push "$REGISTRY/$IMAGE_NAME:${{ github.sha }}"
+          docker push "$REGISTRY/$IMAGE_NAME:latest"
