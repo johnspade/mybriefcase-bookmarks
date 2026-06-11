@@ -4,7 +4,7 @@
 
 Run `just validate` before committing. All checks must pass — CI will reject the PR otherwise.
 
-Never force-push to `master`. If a commit needs fixing, create a new commit instead of amending.
+Never force-push to `main`. If a commit needs fixing, create a new commit instead of amending.
 
 ## Warnings
 
