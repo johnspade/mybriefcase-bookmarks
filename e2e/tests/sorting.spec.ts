@@ -5,9 +5,13 @@ test.describe('Sorting bookmarks', () => {
     await page.locator('.fab-btn').click();
     await page.locator('.fab-menu-item', { hasText: 'New Bookmark' }).click();
     const modal = page.locator('.modal-overlay').first();
+    await expect(modal).toBeVisible();
     await modal.locator('input[name="title"]').fill(title);
     await modal.locator('input[name="url"]').fill(url);
-    await modal.locator('button[type="submit"]').click();
+    await Promise.all([
+      page.waitForResponse(resp => resp.url().includes('/bookmarks') && resp.status() === 200),
+      modal.locator('button[type="submit"]').click(),
+    ]);
     await expect(modal).not.toBeVisible({ timeout: 10000 });
     await expect(page.locator('.list-item', { hasText: title })).toBeVisible({ timeout: 10000 });
   }
