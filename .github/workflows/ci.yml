@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -143,7 +143,7 @@ jobs:
           timeout 30 sh -c 'until curl -sf http://localhost:3000/ | grep -q "Bookmark Manager"; do sleep 1; done'
           docker stop smoke-test
       - name: Push to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
           docker tag automerge-playground:latest "$REGISTRY/$IMAGE_NAME:${{ github.sha }}"
