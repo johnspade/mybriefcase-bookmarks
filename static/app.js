@@ -91,7 +91,7 @@ function initApp() {
     searchExpanded: false,
     setSortOrder: function(order) {
       Alpine.store('app').sortOrder = order;
-      var folderId = getCurrentFolderId();
+      const folderId = getCurrentFolderId();
       if (folderId) {
         htmx.ajax('GET', '/folders/' + folderId + '/content',
                   {target: '#folder-content', swap: 'innerHTML'});
@@ -124,7 +124,7 @@ function initApp() {
   });
 
   document.body.addEventListener('htmx:configRequest', function(e) {
-    var path = e.detail.path || '';
+    const path = e.detail.path || '';
     if (path.match(/\/folders\/[^/]+\/content/) || path.match(/\/folders\/[^/]+$/) || path.match(/\/search/)) {
       e.detail.parameters.sort = Alpine.store('app').sortOrder;
     }
