@@ -12,4 +12,4 @@
 
 ## Screenshots
 
-<!-- Mandatory for frontend changes. Include before and after screenshots with explanations. -->
+<!-- Mandatory for frontend changes. Include before and after screenshots for both desktop and mobile viewports. -->
