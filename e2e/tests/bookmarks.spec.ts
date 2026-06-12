@@ -92,9 +92,11 @@ test.describe('Bookmarks', () => {
     // Accept the confirm dialog
     page.on('dialog', dialog => dialog.accept());
 
-    // Hover to reveal action buttons, then click delete
-    await page.locator('.list-item', { hasText: 'Delete Me' }).hover();
-    await page.locator('.list-item', { hasText: 'Delete Me' }).locator('.item-action-btn[title="Delete"]').click();
+    // Hover to reveal three-dot menu, then click delete
+    const deleteItem = page.locator('.list-item', { hasText: 'Delete Me' });
+    await deleteItem.hover();
+    await deleteItem.locator('.item-menu-trigger').click();
+    await deleteItem.locator('.item-menu-option', { hasText: 'Delete' }).click();
 
     await expect(page.locator('.list-item', { hasText: 'Delete Me' })).not.toBeVisible();
   });

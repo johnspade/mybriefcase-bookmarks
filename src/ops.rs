@@ -280,19 +280,32 @@ pub fn rename_folder(
 }
 
 /// # Errors
-/// Returns an error if the document schema is invalid or the automerge transaction fails.
+/// Returns an error if the move would create a cycle, or if the document schema is invalid,
+/// or if the automerge transaction fails.
 pub fn move_item(
     doc_handle: &DocHandle,
     item_id: &str,
     from_folder_id: &str,
     to_folder_id: &str,
 ) -> anyhow::Result<()> {
+    if from_folder_id == to_folder_id {
+        return Ok(());
+    }
+    anyhow::ensure!(item_id != to_folder_id, "cannot move a folder into itself");
+
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, "folders")?
             .context("missing folders map")?
             .1;
+
+        if tx.get(&folders, item_id)?.is_some() {
+            anyhow::ensure!(
+                !is_descendant_in_tx(&tx, &folders, item_id, to_folder_id),
+                "cannot move a folder into its own subtree"
+            );
+        }
 
         let from_folder = tx
             .get(&folders, from_folder_id)?
@@ -325,6 +338,42 @@ pub fn move_item(
         tx.commit_with(commit_opts(format!("move_item:{item_id}")));
         Ok(())
     })
+}
+
+fn is_descendant_in_tx(
+    tx: &automerge::transaction::Transaction<'_>,
+    folders: &automerge::ObjId,
+    ancestor_id: &str,
+    target_id: &str,
+) -> bool {
+    let mut stack = vec![ancestor_id.to_string()];
+    let mut visited = std::collections::HashSet::new();
+
+    while let Some(fid) = stack.pop() {
+        if !visited.insert(fid.clone()) {
+            continue;
+        }
+        let Some((_, folder)) = tx.get(folders, fid.as_str()).ok().flatten() else {
+            continue;
+        };
+        let Some((_, children)) = tx.get(&folder, "children").ok().flatten() else {
+            continue;
+        };
+        let len = tx.length(&children);
+        for i in 0..len {
+            if let Ok(Some((automerge::Value::Scalar(s), _))) = tx.get(&children, i) {
+                if let Some(child_id) = s.to_str() {
+                    if child_id == target_id {
+                        return true;
+                    }
+                    if tx.get(folders, child_id).ok().flatten().is_some() {
+                        stack.push(child_id.to_string());
+                    }
+                }
+            }
+        }
+    }
+    false
 }
 
 fn insert_items_recursive(
