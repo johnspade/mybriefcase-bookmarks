@@ -290,22 +290,22 @@ body {
 .item-menu-option.danger:hover { background: rgb(200 50 50 / 8%); }
 .item-menu-trigger { position: relative; }
 
-/* Move tree picker */
-.move-tree {
+/* Move folder picker */
+.move-list {
   max-height: 300px; overflow-y: auto;
   border: 1px solid var(--border-light); border-radius: var(--radius-md);
   margin-bottom: var(--space-3); padding: var(--space-2) 0;
 }
-.move-tree-item {
+.move-list-item {
   display: flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-1-5) var(--space-3); cursor: pointer;
+  padding: var(--space-2) var(--space-3); cursor: pointer;
   font-size: var(--text-xs); color: var(--text);
-  transition: background var(--transition); border-radius: 0;
+  transition: background var(--transition);
 }
-.move-tree-item:hover { background: var(--hover-bg); }
-.move-tree-item.current { color: var(--text-faint); }
-.move-tree-item input[type="radio"] { accent-color: var(--accent); margin: 0; }
-.move-tree-label { flex: 1; }
+.move-list-item:hover { background: var(--hover-bg); }
+.move-list-item.current { color: var(--text-faint); }
+.move-list-item input[type="radio"] { accent-color: var(--accent); margin: 0; flex-shrink: 0; }
+.move-list-label { flex: 1; }
 
 .items-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3);

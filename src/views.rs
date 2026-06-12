@@ -877,6 +877,16 @@ pub async fn move_picker_html(
         exclude_ids.insert(id.clone());
     }
 
+    let mut folders_with_paths: Vec<(String, String, bool)> = Vec::new();
+    collect_folder_paths(
+        &store,
+        &store.root_folder_id,
+        "",
+        &exclude_ids,
+        &from_folder_id,
+        &mut folders_with_paths,
+    );
+
     let mut html = String::new();
     html.push_str(r"<h2>Move to&hellip;</h2>");
     html.push_str(
@@ -887,15 +897,16 @@ pub async fn move_picker_html(
         html,
         r#"<input type="hidden" name="from_folder_id" value="{from_folder_id}">"#,
     );
-    html.push_str(r#"<div class="move-tree">"#);
-    build_move_tree_option(
-        &store,
-        &store.root_folder_id,
-        &from_folder_id,
-        &exclude_ids,
-        0,
-        &mut html,
-    );
+    html.push_str(r#"<div class="move-list">"#);
+    for (folder_id, path, is_current) in &folders_with_paths {
+        let current_label = if *is_current { " (current)" } else { "" };
+        let cls = if *is_current { " current" } else { "" };
+        let _ = write!(
+            html,
+            r#"<label class="move-list-item{cls}"><input type="radio" name="to_folder_id" value="{folder_id}" required><span class="move-list-label">{}{current_label}</span></label>"#,
+            html_escape(path),
+        );
+    }
     html.push_str("</div>");
     html.push_str(r#"<div class="modal-actions">"#);
     html.push_str(r#"<button type="button" class="btn btn-ghost" @click="$store.app.showMoveModal = false">Cancel</button>"#);
@@ -922,13 +933,13 @@ fn collect_descendants(
     }
 }
 
-fn build_move_tree_option(
+fn collect_folder_paths(
     store: &BookmarkStore,
     folder_id: &str,
-    current_parent_id: &str,
+    parent_path: &str,
     exclude_ids: &std::collections::HashSet<String>,
-    depth: usize,
-    html: &mut String,
+    current_parent_id: &str,
+    out: &mut Vec<(String, String, bool)>,
 ) {
     if exclude_ids.contains(folder_id) {
         return;
@@ -940,16 +951,13 @@ fn build_move_tree_option(
         return;
     }
 
+    let path = if parent_path.is_empty() {
+        folder.title.clone()
+    } else {
+        format!("{parent_path} / {}", folder.title)
+    };
     let is_current = folder_id == current_parent_id;
-    let padding = 8 + depth * 20;
-    let current_label = if is_current { " (current)" } else { "" };
-    let cls = if is_current { " current" } else { "" };
-
-    let _ = write!(
-        html,
-        r#"<label class="move-tree-item{cls}" style="padding-left:{padding}px"><input type="radio" name="to_folder_id" value="{folder_id}" required><span class="move-tree-label">{}{current_label}</span></label>"#,
-        html_escape(&folder.title),
-    );
+    out.push((folder_id.to_string(), path.clone(), is_current));
 
     let child_folder_ids: Vec<&String> = folder
         .children
@@ -957,14 +965,7 @@ fn build_move_tree_option(
         .filter(|cid| store.folders.get(*cid).is_some_and(|f| !f.deleted))
         .collect();
     for child_id in child_folder_ids {
-        build_move_tree_option(
-            store,
-            child_id,
-            current_parent_id,
-            exclude_ids,
-            depth + 1,
-            html,
-        );
+        collect_folder_paths(store, child_id, &path, exclude_ids, current_parent_id, out);
     }
 }
 

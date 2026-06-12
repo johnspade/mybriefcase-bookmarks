@@ -46,7 +46,7 @@ test.describe('Move items', () => {
     await expect(moveModal).toContainText('Move to');
 
     // Select Folder B as destination
-    await moveModal.locator('.move-tree-item', { hasText: 'Folder B' }).locator('input[type="radio"]').check();
+    await moveModal.locator('.move-list-item', { hasText: 'Folder B' }).locator('input[type="radio"]').check();
     await moveModal.locator('button[type="submit"]').click();
 
     // Modal should close and bookmark should be gone from current folder
@@ -93,7 +93,7 @@ test.describe('Move items', () => {
     await expect(moveModal).toBeVisible();
 
     // Select Target Folder as destination
-    await moveModal.locator('.move-tree-item', { hasText: 'Target Folder' }).locator('input[type="radio"]').check();
+    await moveModal.locator('.move-list-item', { hasText: 'Target Folder' }).locator('input[type="radio"]').check();
     await moveModal.locator('button[type="submit"]').click();
 
     // Modal should close — after move, page navigates to destination folder
