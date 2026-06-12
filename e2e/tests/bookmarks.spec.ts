@@ -142,8 +142,8 @@ test.describe('Bookmarks', () => {
     const editModal = page.locator('#edit-modal-body');
     await expect(editModal).toBeVisible({ timeout: 10_000 });
 
-    // Change folder to Folder B
-    await editModal.locator('select[name="folder_id"]').selectOption({ label: 'Bookmarks / Folder B' });
+    // Change folder to Folder B via radio button
+    await editModal.locator('.move-list-item', { hasText: 'Folder B' }).click();
 
     // Save
     const saveResponse = page.waitForResponse(resp => resp.url().includes('/edit'));
