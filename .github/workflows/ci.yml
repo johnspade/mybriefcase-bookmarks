@@ -159,3 +159,52 @@ jobs:
           docker tag mybriefcase-bookmarks:latest "$REGISTRY/$IMAGE_NAME:latest"
           docker push "$REGISTRY/$IMAGE_NAME:${{ github.sha }}"
           docker push "$REGISTRY/$IMAGE_NAME:latest"
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [docker]
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Semantic Release
+        id: semantic
+        run: npx --yes semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check for new release tag
+        id: check-tag
+        run: |
+          TAG=$(git tag --points-at HEAD | grep "^v" | head -n1)
+          if [ -n "$TAG" ]; then
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "Released $TAG"
+          else
+            echo "No new release"
+          fi
+      - name: Tag Docker image with release version
+        if: steps.check-tag.outputs.tag != ''
+        run: |
+          VERSION="${{ steps.check-tag.outputs.tag }}"
+          SEMVER="${VERSION#v}"
+          MAJOR="$(echo "$SEMVER" | cut -d. -f1)"
+          MINOR="$(echo "$SEMVER" | cut -d. -f1-2)"
+
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+          docker pull "$REGISTRY/$IMAGE_NAME:${{ github.sha }}"
+
+          for TAG in "$VERSION" "$SEMVER" "$MINOR" "$MAJOR"; do
+            docker tag "$REGISTRY/$IMAGE_NAME:${{ github.sha }}" "$REGISTRY/$IMAGE_NAME:$TAG"
+            docker push "$REGISTRY/$IMAGE_NAME:$TAG"
+          done
