@@ -52,9 +52,11 @@ test.describe('Folders', () => {
     // Accept confirm dialog
     page.on('dialog', dialog => dialog.accept());
 
-    // Hover to reveal action buttons, then click delete
-    await page.locator('.list-item', { hasText: 'To Delete' }).hover();
-    await page.locator('.list-item', { hasText: 'To Delete' }).locator('.item-action-btn[title="Delete"]').click();
+    // Hover to reveal three-dot menu, then click delete
+    const deleteItem = page.locator('.list-item', { hasText: 'To Delete' });
+    await deleteItem.hover();
+    await deleteItem.locator('.item-menu-trigger').click();
+    await deleteItem.locator('.item-menu-option', { hasText: 'Delete' }).click();
 
     await expect(page.locator('.list-item', { hasText: 'To Delete' })).not.toBeVisible();
   });
@@ -93,9 +95,11 @@ test.describe('Folders', () => {
     // Accept confirm dialog
     page.on('dialog', dialog => dialog.accept());
 
-    // Delete the folder
-    await page.locator('.list-item', { hasText: 'Cascade Folder' }).hover();
-    await page.locator('.list-item', { hasText: 'Cascade Folder' }).locator('.item-action-btn[title="Delete"]').click();
+    // Delete the folder via three-dot menu
+    const cascadeItem = page.locator('.list-item', { hasText: 'Cascade Folder' });
+    await cascadeItem.hover();
+    await cascadeItem.locator('.item-menu-trigger').click();
+    await cascadeItem.locator('.item-menu-option', { hasText: 'Delete' }).click();
     await expect(page.locator('.list-item', { hasText: 'Cascade Folder' })).not.toBeVisible();
 
     // Verify the bookmark doesn't appear anywhere in the UI

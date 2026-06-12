@@ -87,6 +87,7 @@ pub struct UpdateBookmarkForm {
     title: Option<String>,
     url: Option<String>,
     notes: Option<String>,
+    folder_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -177,6 +178,7 @@ struct EditBookmarkTemplate {
     title: String,
     url: String,
     notes: String,
+    folders: Vec<(String, String, bool)>,
 }
 
 #[derive(Template)]
@@ -653,11 +655,26 @@ pub async fn bookmark_edit_form(
         _ => return Ok(Html(render(&DetailEmptyTemplate)?).into_response()),
     };
 
+    let current_folder_id = find_folder_for_bookmark(&store, &id)
+        .unwrap_or(&store.root_folder_id)
+        .to_string();
+    let mut folders = Vec::new();
+    let exclude = std::collections::HashSet::new();
+    collect_folder_paths(
+        &store,
+        &store.root_folder_id,
+        "",
+        &exclude,
+        &current_folder_id,
+        &mut folders,
+    );
+
     let template = EditBookmarkTemplate {
         id: id.clone(),
         title: bm.title.clone(),
         url: bm.url.clone(),
         notes: bm.notes.clone(),
+        folders,
     };
 
     Ok(Html(render(&template)?).into_response())
@@ -733,6 +750,18 @@ pub async fn update_bookmark_html(
         form.notes.as_deref(),
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(ref new_folder_id) = form.folder_id {
+        let store = read_store(&state.doc_handle)?;
+        let current_folder_id = find_folder_for_bookmark(&store, &id)
+            .unwrap_or(&store.root_folder_id)
+            .to_string();
+        if *new_folder_id != current_folder_id {
+            ops::move_item(&state.doc_handle, &id, &current_folder_id, new_folder_id)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+    }
+
     after_write(&state);
 
     let store = read_store(&state.doc_handle)?;
@@ -829,6 +858,7 @@ pub async fn rename_folder_html(
 }
 
 /// # Errors
+/// Returns `422 Unprocessable Entity` if cycle detection fails.
 /// Returns `500 Internal Server Error` if template rendering fails.
 pub async fn move_item_html(
     State(state): State<Arc<AppState>>,
@@ -840,9 +870,132 @@ pub async fn move_item_html(
         &form.source,
         &form.destination,
     )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("cycle") || msg.contains("itself") || msg.contains("subtree") {
+            StatusCode::UNPROCESSABLE_ENTITY
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
     after_write(&state);
     render_folder_response(&state, &form.destination, true, SortOrder::default())
+}
+
+/// # Errors
+/// Returns `404 Not Found` if the item does not exist.
+/// Returns `500 Internal Server Error` if template rendering fails.
+pub async fn move_picker_html(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Html<String>, StatusCode> {
+    let store = read_store(&state.doc_handle)?;
+
+    let is_folder = store.folders.contains_key(&id);
+    let is_bookmark = store.bookmarks.get(&id).is_some_and(|b| !b.deleted);
+    if !is_folder && !is_bookmark {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let from_folder_id =
+        find_parent_folder_id(&store, &id).unwrap_or_else(|| store.root_folder_id.clone());
+
+    let mut exclude_ids = std::collections::HashSet::new();
+    if is_folder {
+        collect_descendants(&store, &id, &mut exclude_ids);
+        exclude_ids.insert(id.clone());
+    }
+
+    let mut folders_with_paths: Vec<(String, String, bool)> = Vec::new();
+    collect_folder_paths(
+        &store,
+        &store.root_folder_id,
+        "",
+        &exclude_ids,
+        &from_folder_id,
+        &mut folders_with_paths,
+    );
+
+    let mut html = String::new();
+    html.push_str(r"<h2>Move to&hellip;</h2>");
+    html.push_str(
+        r##"<form hx-post="/items/move" hx-target="#folder-content" hx-swap="innerHTML">"##,
+    );
+    let _ = write!(html, r#"<input type="hidden" name="item_id" value="{id}">"#);
+    let _ = write!(
+        html,
+        r#"<input type="hidden" name="from_folder_id" value="{from_folder_id}">"#,
+    );
+    html.push_str(r#"<div class="move-list">"#);
+    for (folder_id, path, is_current) in &folders_with_paths {
+        let current_label = if *is_current { " (current)" } else { "" };
+        let cls = if *is_current { " current" } else { "" };
+        let _ = write!(
+            html,
+            r#"<label class="move-list-item{cls}"><span class="move-list-label">{}{current_label}</span><input type="radio" name="to_folder_id" value="{folder_id}" required></label>"#,
+            html_escape(path),
+        );
+    }
+    html.push_str("</div>");
+    html.push_str(r#"<div class="modal-actions">"#);
+    html.push_str(r#"<button type="button" class="btn btn-ghost" @click="$store.app.showMoveModal = false">Cancel</button>"#);
+    html.push_str(r#"<button type="submit" class="btn btn-primary">Move</button>"#);
+    html.push_str("</div></form>");
+
+    Ok(Html(html))
+}
+
+fn collect_descendants(
+    store: &BookmarkStore,
+    folder_id: &str,
+    out: &mut std::collections::HashSet<String>,
+) {
+    if let Some(folder) = store.folders.get(folder_id) {
+        for child_id in &folder.children {
+            if let Some(sub) = store.folders.get(child_id) {
+                if !sub.deleted {
+                    out.insert(child_id.clone());
+                    collect_descendants(store, child_id, out);
+                }
+            }
+        }
+    }
+}
+
+fn collect_folder_paths(
+    store: &BookmarkStore,
+    folder_id: &str,
+    parent_path: &str,
+    exclude_ids: &std::collections::HashSet<String>,
+    current_parent_id: &str,
+    out: &mut Vec<(String, String, bool)>,
+) {
+    if exclude_ids.contains(folder_id) {
+        return;
+    }
+    let Some(folder) = store.folders.get(folder_id) else {
+        return;
+    };
+    if folder.deleted {
+        return;
+    }
+
+    let path = if parent_path.is_empty() {
+        folder.title.clone()
+    } else {
+        format!("{parent_path} / {}", folder.title)
+    };
+    let is_current = folder_id == current_parent_id;
+    out.push((folder_id.to_string(), path.clone(), is_current));
+
+    let child_folder_ids: Vec<&String> = folder
+        .children
+        .iter()
+        .filter(|cid| store.folders.get(*cid).is_some_and(|f| !f.deleted))
+        .collect();
+    for child_id in child_folder_ids {
+        collect_folder_paths(store, child_id, &path, exclude_ids, current_parent_id, out);
+    }
 }
 
 /// # Errors

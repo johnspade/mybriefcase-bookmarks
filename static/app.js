@@ -86,9 +86,17 @@ function initApp() {
     showFolderModal: false,
     showImportModal: false,
     showEditModal: false,
+    showMoveModal: false,
     sidebarOpen: false,
     detailOpen: false,
     searchExpanded: false,
+    openMovePicker: function(itemId) {
+      htmx.ajax('GET', '/move-picker/' + itemId, {target: '#move-picker-body', swap: 'innerHTML'}).then(function() {
+        Alpine.store('app').showMoveModal = true;
+        const form = document.querySelector('#move-picker-body form');
+        if (form) htmx.process(form);
+      });
+    },
     setSortOrder: function(order) {
       Alpine.store('app').sortOrder = order;
       const folderId = getCurrentFolderId();
@@ -145,6 +153,17 @@ function initApp() {
   document.body.addEventListener('htmx:afterSwap', function(e) {
     if (e.detail.target && e.detail.target.id === 'edit-modal-body') {
       Alpine.store('app').showEditModal = true;
+    }
+  });
+
+  document.body.addEventListener('htmx:afterRequest', function(e) {
+    if (e.detail.elt && e.detail.elt.closest && e.detail.elt.closest('#move-picker-body')) {
+      if (e.detail.successful) {
+        Alpine.store('app').showMoveModal = false;
+        const folderId = getCurrentFolderId();
+        htmx.ajax('GET', '/sidebar' + (folderId ? '?folder_id=' + encodeURIComponent(folderId) : ''),
+                  {target: '#sidebar-tree', swap: 'innerHTML'});
+      }
     }
   });
 
@@ -233,6 +252,7 @@ document.addEventListener('keydown', function(e) {
     Alpine.store('app').showFolderModal = false;
     Alpine.store('app').showImportModal = false;
     Alpine.store('app').showEditModal = false;
+    Alpine.store('app').showMoveModal = false;
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
     e.preventDefault();

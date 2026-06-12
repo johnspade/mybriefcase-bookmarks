@@ -179,6 +179,14 @@
   </div>
 </template>
 
+<!-- Move Item Modal -->
+<div class="modal-overlay" x-show="$store.app.showMoveModal" x-cloak
+     @click.self="$store.app.showMoveModal = false" @keydown.escape.window="$store.app.showMoveModal && ($store.app.showMoveModal = false)">
+  <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="move-modal-title" @keydown.tab="trapFocus($event)">
+    <div id="move-picker-body"></div>
+  </div>
+</div>
+
 <!-- Edit Bookmark Modal -->
 <div class="modal-overlay" x-show="$store.app.showEditModal" x-cloak
      @click.self="$store.app.showEditModal = false" @keydown.escape.window="$store.app.showEditModal && ($store.app.showEditModal = false)">

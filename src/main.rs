@@ -74,6 +74,7 @@ fn build_router(state: Arc<api::AppState>) -> Router {
         .route("/folders/{id}/remove", post(views::delete_folder_html))
         .route("/folders/{id}/rename", post(views::rename_folder_html))
         .route("/items/move", post(views::move_item_html))
+        .route("/move-picker/{id}", get(views::move_picker_html))
         .route("/events", get(views::sse_events))
         .route("/sidebar", get(views::sidebar_only))
         .route("/search", get(views::search))

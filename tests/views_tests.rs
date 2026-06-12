@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 use common::new_initialized_doc;
-use mybriefcase_bookmarks::{api, views};
+use mybriefcase_bookmarks::{api, ops, views};
 use views::SortOrder;
 
 fn build_views_app() -> (Router, String) {
@@ -33,10 +33,38 @@ fn build_views_app() -> (Router, String) {
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
         .route("/bookmarks/new", post(views::create_bookmark_html))
+        .route("/items/move", post(views::move_item_html))
+        .route("/move-picker/{id}", get(views::move_picker_html))
         .with_state(state);
     std::mem::forget(td.temp_dir);
     std::mem::forget(sync_root);
     (app, root_id)
+}
+
+fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) {
+    let td = new_initialized_doc("test-views");
+    let root_id = td.root_folder_id.clone();
+    let doc_handle = td.doc_handle.clone();
+    let sync_root = tempfile::TempDir::new().unwrap();
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let state = Arc::new(api::AppState {
+        doc_handle: td.doc_handle,
+        sync_root: sync_root.path().to_path_buf(),
+        client_id: "test-views".to_string(),
+        sse_tx,
+    });
+    let app = Router::new()
+        .route("/folders/{id}/content", get(views::folder_content))
+        .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
+        .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
+        .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
+        .route("/bookmarks/new", post(views::create_bookmark_html))
+        .route("/items/move", post(views::move_item_html))
+        .route("/move-picker/{id}", get(views::move_picker_html))
+        .with_state(state);
+    std::mem::forget(td.temp_dir);
+    std::mem::forget(sync_root);
+    (app, root_id, doc_handle)
 }
 
 async fn get_html(app: Router, uri: &str) -> (StatusCode, String) {
@@ -325,4 +353,135 @@ async fn folder_content_sorts_by_date_asc() {
         zebra_pos < apple_pos && apple_pos < mango_pos,
         "sort=date_asc should show oldest first (Zebra < Apple < Mango)"
     );
+}
+
+// ─── Move feature tests ──────────────────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_item_same_folder_noop() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+
+    let body = format!("item_id={bm_id}&from_folder_id={root_id}&to_folder_id={root_id}");
+    let (status, _) = post_form(app, "/items/move", &body).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_item_into_itself_fails() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_a = ops::create_folder(&doc, &root_id, "A").unwrap();
+
+    let body = format!("item_id={folder_a}&from_folder_id={root_id}&to_folder_id={folder_a}");
+    let (status, _) = post_form(app, "/items/move", &body).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_item_into_descendant_fails() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_a = ops::create_folder(&doc, &root_id, "A").unwrap();
+    let folder_b = ops::create_folder(&doc, &folder_a, "B").unwrap();
+    let folder_c = ops::create_folder(&doc, &folder_b, "C").unwrap();
+
+    let body = format!("item_id={folder_a}&from_folder_id={root_id}&to_folder_id={folder_c}");
+    let (status, _) = post_form(app, "/items/move", &body).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_folder_between_siblings() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_a = ops::create_folder(&doc, &root_id, "A").unwrap();
+    let folder_b = ops::create_folder(&doc, &root_id, "B").unwrap();
+
+    let body = format!("item_id={folder_b}&from_folder_id={root_id}&to_folder_id={folder_a}");
+    let (status, _) = post_form(app, "/items/move", &body).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let a = store.folders.get(&folder_a).unwrap();
+    assert!(a.children.contains(&folder_b));
+    let root = store.folders.get(&root_id).unwrap();
+    assert!(!root.children.contains(&folder_b));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_folder_to_root() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_a = ops::create_folder(&doc, &root_id, "A").unwrap();
+    let folder_b = ops::create_folder(&doc, &folder_a, "B").unwrap();
+
+    let body = format!("item_id={folder_b}&from_folder_id={folder_a}&to_folder_id={root_id}");
+    let (status, _) = post_form(app, "/items/move", &body).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let root = store.folders.get(&root_id).unwrap();
+    assert!(root.children.contains(&folder_b));
+    let a = store.folders.get(&folder_a).unwrap();
+    assert!(!a.children.contains(&folder_b));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_picker_returns_html() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+    ops::create_folder(&doc, &root_id, "Target Folder").unwrap();
+
+    let (status, html) = get_html(app, &format!("/move-picker/{bm_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("Move to"));
+    assert!(html.contains("Target Folder"));
+    assert!(html.contains("Bookmarks"));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_picker_excludes_self_for_folder() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_a = ops::create_folder(&doc, &root_id, "FolderA").unwrap();
+
+    let (status, html) = get_html(app, &format!("/move-picker/{folder_a}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !html.contains(&format!(r#"name="to_folder_id" value="{folder_a}""#)),
+        "folder should not appear as a move destination"
+    );
+    assert!(!html.contains("FolderA"));
+    assert!(html.contains("Bookmarks"));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_picker_excludes_descendants() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_a = ops::create_folder(&doc, &root_id, "A-Parent").unwrap();
+    let folder_b = ops::create_folder(&doc, &folder_a, "B-Child").unwrap();
+    let _folder_c = ops::create_folder(&doc, &folder_b, "C-Grandchild").unwrap();
+
+    let (status, html) = get_html(app, &format!("/move-picker/{folder_a}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!html.contains("A-Parent"));
+    assert!(!html.contains("B-Child"));
+    assert!(!html.contains("C-Grandchild"));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn move_picker_shows_current_parent() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+
+    let (status, html) = get_html(app, &format!("/move-picker/{bm_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("(current)"));
 }
