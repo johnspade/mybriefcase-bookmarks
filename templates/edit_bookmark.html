@@ -16,15 +16,15 @@
   </div>
   <div class="detail-field">
     <label>Folder</label>
-    <div class="move-list">
+    <select name="folder_id">
       {% for folder in folders %}
       {% if folder.2 %}
-      <label class="move-list-item current"><span class="move-list-label">{{ folder.1 }} (current)</span><input type="radio" name="folder_id" value="{{ folder.0 }}" checked></label>
+      <option value="{{ folder.0 }}" selected>{{ folder.1 }}</option>
       {% else %}
-      <label class="move-list-item"><span class="move-list-label">{{ folder.1 }}</span><input type="radio" name="folder_id" value="{{ folder.0 }}"></label>
+      <option value="{{ folder.0 }}">{{ folder.1 }}</option>
       {% endif %}
       {% endfor %}
-    </div>
+    </select>
   </div>
   <div class="modal-actions">
     <button type="button" class="btn btn-ghost" @click="$store.app.showEditModal = false">Cancel</button>

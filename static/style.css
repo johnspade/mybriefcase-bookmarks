@@ -306,11 +306,8 @@ body {
 }
 .move-list label.move-list-item:hover { background: var(--hover-bg); }
 .move-list label.move-list-item.current { color: var(--text-faint); }
-.detail-field .move-list-item input[type="radio"],
 .move-list .move-list-item input[type="radio"] {
   accent-color: var(--accent); margin: 0; flex-shrink: 0; margin-left: auto;
-  width: auto; background: none; border: none; border-radius: 0; padding: 0;
-  box-shadow: none;
 }
 .move-list-label { flex: 1; min-width: 0; }
 
@@ -575,9 +572,11 @@ body.drawer-open { overflow: hidden; }
   .item-menu-option { min-height: 44px; padding: var(--space-3) var(--space-4); font-size: var(--text-xs); }
   .grid-menu-btn { opacity: 1; width: 44px; height: 44px; }
 
-  .edit-modal { width: 100%; max-width: 100%; margin: 0; border-radius: 0; max-height: 90dvh; }
+  .edit-modal { width: 100%; max-width: 100%; margin: 0; border-radius: 0; max-height: 90dvh; padding: var(--space-4); }
 
-  .detail-field input, .detail-field textarea { min-height: 44px; padding: var(--space-3); }
+  .detail-field input, .detail-field textarea, .detail-field select { min-height: 44px; padding: var(--space-2) var(--space-3); }
+  .modal .detail-field { margin-bottom: var(--space-2); }
+  .move-list label.move-list-item { padding: var(--space-2) var(--space-3); min-height: 44px; }
 
   .grid-item { padding: var(--space-5) var(--space-4); }
 
