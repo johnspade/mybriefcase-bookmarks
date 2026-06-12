@@ -4,6 +4,8 @@ use axum::Router;
 use axum::routing::{get, post, put};
 use axum_embed::ServeEmbed;
 use rust_embed::Embed;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -38,6 +40,16 @@ impl Config {
             client_id: std::env::var("MBB_CLIENT_ID").ok(),
         }
     }
+}
+
+fn compute_static_version() -> String {
+    let mut hasher = DefaultHasher::new();
+    for path in StaticAssets::iter() {
+        if let Some(file) = StaticAssets::get(&path) {
+            file.data.hash(&mut hasher);
+        }
+    }
+    format!("{:016x}", hasher.finish())
 }
 
 fn write_peer_info(sync_root: &std::path::Path, client_id: &str) {
@@ -169,11 +181,13 @@ async fn main() {
     write_peer_info(&cfg.sync_root, &client_id);
 
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let static_version = compute_static_version();
     let state = Arc::new(api::AppState {
         doc_handle,
         sync_root: cfg.sync_root,
         client_id,
         sse_tx,
+        static_version,
     });
 
     spawn_watcher(&state);

@@ -26,6 +26,7 @@ fn build_views_app() -> (Router, String) {
         sync_root: sync_root.path().to_path_buf(),
         client_id: "test-views".to_string(),
         sse_tx,
+        static_version: "test".to_string(),
     });
     let app = Router::new()
         .route("/folders/{id}/content", get(views::folder_content))
@@ -52,6 +53,7 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
         sync_root: sync_root.path().to_path_buf(),
         client_id: "test-views".to_string(),
         sse_tx,
+        static_version: "test".to_string(),
     });
     let app = Router::new()
         .route("/folders/{id}/content", get(views::folder_content))

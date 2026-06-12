@@ -136,6 +136,7 @@ struct BaseTemplate {
     content_html: String,
     current_folder_id: String,
     page_title: String,
+    static_v: String,
 }
 
 #[derive(Template)]
@@ -542,6 +543,7 @@ pub async fn index_page(
         content_html,
         current_folder_id: root_id,
         page_title: "MyBriefcase Bookmarks".to_string(),
+        static_v: state.static_version.clone(),
     };
 
     Ok(Html(render(&page)?))
@@ -582,6 +584,7 @@ pub async fn index_page_for_folder(
         content_html,
         current_folder_id: effective_id,
         page_title,
+        static_v: state.static_version.clone(),
     };
 
     Ok(Html(render(&page)?))

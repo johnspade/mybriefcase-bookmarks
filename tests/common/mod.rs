@@ -96,6 +96,7 @@ pub fn build_app(
         sync_root,
         client_id,
         sse_tx,
+        static_version: "test".to_string(),
     });
 
     Router::new()

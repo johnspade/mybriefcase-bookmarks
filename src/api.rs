@@ -17,6 +17,7 @@ pub struct AppState {
     pub sync_root: std::path::PathBuf,
     pub client_id: String,
     pub sse_tx: tokio::sync::broadcast::Sender<()>,
+    pub static_version: String,
 }
 
 #[derive(Serialize)]
