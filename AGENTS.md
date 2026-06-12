@@ -1,5 +1,15 @@
 # Agent Guidelines
 
+## Commit Messages
+
+PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) — CI enforces this. The PR title becomes the squash-merge commit message on main, and drives automatic semantic versioning.
+
+Format: `<type>: <description>` or `<type>(scope): <description>`
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`.
+
+Use `!` after the type for breaking changes: `feat!: remove legacy endpoint`.
+
 ## Before Committing
 
 Run `just validate` before committing. All checks must pass — CI will reject the PR otherwise.

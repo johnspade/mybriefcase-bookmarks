@@ -82,3 +82,9 @@ just validate-all
 ```
 
 Individual checks are also available (e.g. `just fmt`, `just test`). Run `just` to see all recipes.
+
+## Releases
+
+Releases are fully automated. Every push to `main` with a `feat:` or `fix:` conventional commit triggers [semantic-release](https://github.com/semantic-release/semantic-release), which creates a GitHub Release and version tag. The Docker image is then re-tagged with semantic version tags (e.g., `:v1.2.3`, `:1.2`, `:1`).
+
+PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) format — CI validates this.
