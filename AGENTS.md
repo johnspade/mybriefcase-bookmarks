@@ -34,6 +34,8 @@ uv run --with <packages> script.py
 
 Always use `MBB_PORT=0` when launching the server (lets the OS pick a free port). Never hardcode ports like 3000, 3001, etc. — other agents may be running in parallel. Read the actual port from stderr output.
 
+Never kill processes by port (e.g. `lsof -ti :PORT | xargs kill`). The user's Firefox, Docker, and other tools may be listening on the same ports. To stop a test server you started, kill its specific PID instead.
+
 ## Pull Requests
 
 PR descriptions must follow the template in `.github/pull_request_template.md`.
