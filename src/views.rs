@@ -87,6 +87,7 @@ pub struct UpdateBookmarkForm {
     title: Option<String>,
     url: Option<String>,
     notes: Option<String>,
+    folder_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -177,6 +178,7 @@ struct EditBookmarkTemplate {
     title: String,
     url: String,
     notes: String,
+    folders: Vec<(String, String, bool)>,
 }
 
 #[derive(Template)]
@@ -653,11 +655,26 @@ pub async fn bookmark_edit_form(
         _ => return Ok(Html(render(&DetailEmptyTemplate)?).into_response()),
     };
 
+    let current_folder_id = find_folder_for_bookmark(&store, &id)
+        .unwrap_or(&store.root_folder_id)
+        .to_string();
+    let mut folders = Vec::new();
+    let exclude = std::collections::HashSet::new();
+    collect_folder_paths(
+        &store,
+        &store.root_folder_id,
+        "",
+        &exclude,
+        &current_folder_id,
+        &mut folders,
+    );
+
     let template = EditBookmarkTemplate {
         id: id.clone(),
         title: bm.title.clone(),
         url: bm.url.clone(),
         notes: bm.notes.clone(),
+        folders,
     };
 
     Ok(Html(render(&template)?).into_response())
@@ -733,6 +750,18 @@ pub async fn update_bookmark_html(
         form.notes.as_deref(),
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(ref new_folder_id) = form.folder_id {
+        let store = read_store(&state.doc_handle)?;
+        let current_folder_id = find_folder_for_bookmark(&store, &id)
+            .unwrap_or(&store.root_folder_id)
+            .to_string();
+        if *new_folder_id != current_folder_id {
+            ops::move_item(&state.doc_handle, &id, &current_folder_id, new_folder_id)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+    }
+
     after_write(&state);
 
     let store = read_store(&state.doc_handle)?;

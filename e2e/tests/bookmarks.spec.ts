@@ -100,4 +100,58 @@ test.describe('Bookmarks', () => {
 
     await expect(page.locator('.list-item', { hasText: 'Delete Me' })).not.toBeVisible();
   });
+
+  test('move bookmark via edit form folder picker', async ({ serverPage: page }) => {
+    await page.goto('/');
+
+    // Create Folder A
+    await page.locator('.fab-btn').click();
+    await page.locator('.fab-menu-item', { hasText: 'New Folder' }).click();
+    const folderModal1 = page.locator('.modal-overlay').first();
+    await folderModal1.locator('input[name="title"]').fill('Folder A');
+    await folderModal1.locator('button[type="submit"]').click();
+    await expect(folderModal1).not.toBeVisible();
+
+    // Create Folder B
+    await page.locator('.fab-btn').click();
+    await page.locator('.fab-menu-item', { hasText: 'New Folder' }).click();
+    const folderModal2 = page.locator('.modal-overlay').first();
+    await folderModal2.locator('input[name="title"]').fill('Folder B');
+    await folderModal2.locator('button[type="submit"]').click();
+    await expect(folderModal2).not.toBeVisible();
+
+    // Navigate into Folder A
+    await page.locator('.list-item', { hasText: 'Folder A' }).click();
+    await expect(page.locator('.breadcrumb')).toContainText('Folder A');
+
+    // Create a bookmark inside Folder A
+    await page.locator('.fab-btn').click();
+    await page.locator('.fab-menu-item', { hasText: 'New Bookmark' }).click();
+    const bmModal = page.locator('.modal-overlay').first();
+    await bmModal.locator('input[name="title"]').fill('Move Via Edit');
+    await bmModal.locator('input[name="url"]').fill('https://move-edit.example.com');
+    await bmModal.locator('button[type="submit"]').click();
+    await expect(bmModal).not.toBeVisible();
+
+    // Open bookmark detail
+    await page.locator('.list-item', { hasText: 'Move Via Edit' }).click();
+    await expect(page.locator('#detail-body .detail-title')).toHaveText('Move Via Edit', { timeout: 10_000 });
+
+    // Click Edit to open the edit modal
+    await page.locator('#detail-body button', { hasText: 'Edit' }).click();
+    const editModal = page.locator('#edit-modal-body');
+    await expect(editModal).toBeVisible({ timeout: 10_000 });
+
+    // Change folder to Folder B
+    await editModal.locator('select[name="folder_id"]').selectOption({ label: 'Bookmarks / Folder B' });
+
+    // Save
+    const saveResponse = page.waitForResponse(resp => resp.url().includes('/edit'));
+    await editModal.locator('button[type="submit"]').click();
+    await saveResponse;
+
+    // Bookmark should no longer be in Folder A - we should now be viewing Folder B
+    await expect(page.locator('.breadcrumb')).toContainText('Folder B');
+    await expect(page.locator('.list-item', { hasText: 'Move Via Edit' })).toBeVisible();
+  });
 });
