@@ -296,16 +296,23 @@ body {
   border: 1px solid var(--border-light); border-radius: var(--radius-md);
   margin-bottom: var(--space-3); padding: var(--space-2) 0;
 }
-.move-list-item {
+.move-list label.move-list-item {
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-3); cursor: pointer;
   font-size: var(--text-xs); color: var(--text);
   transition: background var(--transition);
+  text-transform: none; letter-spacing: normal; font-weight: normal;
+  margin-bottom: 0;
 }
-.move-list-item:hover { background: var(--hover-bg); }
-.move-list-item.current { color: var(--text-faint); }
-.move-list-item input[type="radio"] { accent-color: var(--accent); margin: 0; flex-shrink: 0; }
-.move-list-label { flex: 1; }
+.move-list label.move-list-item:hover { background: var(--hover-bg); }
+.move-list label.move-list-item.current { color: var(--text-faint); }
+.detail-field .move-list-item input[type="radio"],
+.move-list .move-list-item input[type="radio"] {
+  accent-color: var(--accent); margin: 0; flex-shrink: 0; margin-left: auto;
+  width: auto; background: none; border: none; border-radius: 0; padding: 0;
+  box-shadow: none;
+}
+.move-list-label { flex: 1; min-width: 0; }
 
 .items-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3);

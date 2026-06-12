@@ -932,7 +932,7 @@ pub async fn move_picker_html(
         let cls = if *is_current { " current" } else { "" };
         let _ = write!(
             html,
-            r#"<label class="move-list-item{cls}"><input type="radio" name="to_folder_id" value="{folder_id}" required><span class="move-list-label">{}{current_label}</span></label>"#,
+            r#"<label class="move-list-item{cls}"><span class="move-list-label">{}{current_label}</span><input type="radio" name="to_folder_id" value="{folder_id}" required></label>"#,
             html_escape(path),
         );
     }
