@@ -48,7 +48,12 @@
 <main class="app-body">
   <div class="drawer-backdrop" :class="($store.app.sidebarOpen || $store.app.detailOpen) && 'visible'" @click="$store.app.sidebarOpen = false; $store.app.detailOpen = false"></div>
   <div class="sidebar" :class="$store.app.sidebarOpen && 'open'">
-    <div class="sidebar-header">Bookmarks</div>
+    <div class="sidebar-header">
+      Bookmarks
+      <button type="button" class="sidebar-close" aria-label="Close sidebar" @click="$store.app.sidebarOpen = false">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
     <div class="sidebar-tree" id="sidebar-tree">{{ sidebar_html|safe }}</div>
     <div class="sidebar-footer">
       <button type="button" class="sidebar-action-btn" @click="$store.app.sidebarOpen = false; $store.app.showImportModal = true">Import Bookmarks</button>
