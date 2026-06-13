@@ -40,38 +40,43 @@ Never kill processes by port (e.g. `lsof -ti :PORT | xargs kill`). The user's Fi
 
 PR descriptions must follow the template in `.github/pull_request_template.md`.
 
-When a PR touches the frontend (HTML, CSS, JS, templates), attach before and after screenshots for both desktop and mobile viewports. Use the Firefox devtools MCP (if available) for manual testing, debugging, and taking screenshots.
+When a PR touches the frontend (HTML, CSS, JS, templates), attach before and after screenshots for both desktop and mobile viewports. Use the Chrome DevTools MCP (preferred) or Firefox DevTools MCP for manual testing, debugging, and taking screenshots.
 
 ## Mobile Viewport Screenshots
 
-Use `set_viewport_size` + `navigate_page` (in that order) to trigger mobile layout. Setting the viewport after the page is already loaded won't re-trigger CSS media queries for elements that are already rendered.
+Use `chrome-devtools-mcp` for viewport screenshots. Its `emulate` tool uses Chrome's device metrics override (not window resizing), so it can emulate any viewport including phone sizes below 500px.
+
+**Setup** (once per machine):
+
+```
+claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest --headless
+```
 
 **Procedure for mobile screenshots:**
 
-1. `set_viewport_size` — width: 375, height: 812
-2. `navigate_page` (or reload) — the page must load *after* the viewport is set
-3. `screenshot_page`
+1. `emulate` — viewport: `"375x812x2,mobile,touch"`
+2. `navigate_page` — load the target URL
+3. `take_screenshot`
 
 **Procedure for desktop screenshots:**
 
-1. `set_viewport_size` — width: 1280, height: 800
-2. `navigate_page` (or reload)
-3. `screenshot_page`
+1. `emulate` — viewport: `"1280x800x1"`
+2. `navigate_page` — load the target URL
+3. `take_screenshot`
 
 **How to distinguish mobile from desktop:**
 
-| Indicator | Desktop (> 768px) | Mobile (≤ 768px) |
+| Indicator | Desktop (> 768px) | Mobile (≤ 480px) |
 |---|---|---|
-| Sidebar | Always visible | Hidden (drawer, opens via ≡) |
+| Sidebar | Always visible | Hidden (drawer) |
 | Detail panel | Always visible | Hidden (drawer) |
 | Hamburger menu (≡) | Hidden | Visible |
+| Back/Forward buttons | Visible | Hidden |
+| Search bar | Full text input | Collapsed to icon |
+| Statusbar | Visible | Hidden |
 | Touch targets | 28px buttons | 44px buttons |
 
-**Limitations:**
-
-- Firefox enforces a minimum window width of ~500 CSS px on macOS. Requesting smaller values (e.g. 375) will clamp to ~500px. This still triggers the `≤ 768px` breakpoint (the primary mobile layout), so it works for screenshots.
-- The `≤ 480px` breakpoint (hides back/forward buttons, collapses search to icon) cannot be triggered via the MCP on macOS due to this minimum. If you need to verify those styles, use the e2e test suite (Playwright) which runs headless without this constraint.
-- If `set_viewport_size` appears to have no effect, `restart_firefox` and then set the viewport *before* the first navigation. Firefox may cache the initial window size from a prior session.
+**Why not Firefox DevTools MCP?** Firefox's `set_viewport_size` resizes the OS window, which is clamped to ~500 CSS px on macOS. This triggers the ≤768px breakpoint (hamburger menu, drawer panels) but cannot reach the ≤480px breakpoint (hidden back/forward, collapsed search). Chrome's `emulate` uses CDP device metrics override which has no such limitation.
 
 ## Project Context
 
