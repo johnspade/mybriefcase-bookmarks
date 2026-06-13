@@ -14,6 +14,7 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 128, max_shrink_iters: 2048, .. ProptestConfig::default() })]
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn two_peer_convergence(
         ops_a in arb_op_sequence(3..15),
         ops_b in arb_op_sequence(3..15),
@@ -43,6 +44,7 @@ proptest! {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn three_peer_convergence(
         ops_a in arb_op_sequence(2..10),
         ops_b in arb_op_sequence(2..10),
@@ -79,6 +81,7 @@ proptest! {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn merge_order_independence(
         ops_a in arb_op_sequence(3..12),
         ops_b in arb_op_sequence(3..12),
@@ -110,6 +113,7 @@ proptest! {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn merge_is_idempotent(
         ops in arb_op_sequence(3..15),
     ) {

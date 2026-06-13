@@ -15,6 +15,7 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 128, max_shrink_iters: 2048, .. ProptestConfig::default() })]
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn moves_preserve_tree_validity(ops in arb_op_sequence(5..20)) {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _guard = rt.enter();
@@ -31,6 +32,7 @@ proptest! {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn delete_cascade_descendants(
         setup_ops in arb_op_sequence(5..15),
         folder_idx in 0..10usize,
@@ -57,6 +59,7 @@ proptest! {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn delete_preserves_unrelated(
         setup_ops in arb_op_sequence(5..15),
         folder_idx in 0..10usize,
@@ -106,6 +109,7 @@ proptest! {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn concurrent_moves_converge(
         setup_ops in arb_op_sequence(5..12),
         move_item_idx in 0..20usize,
@@ -149,6 +153,7 @@ proptest! {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn concurrent_delete_and_add(
         setup_ops in arb_op_sequence(3..10),
         extra_op in arb_op(),

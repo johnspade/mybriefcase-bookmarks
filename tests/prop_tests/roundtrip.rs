@@ -59,6 +59,7 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 64, max_shrink_iters: 2048, .. ProptestConfig::default() })]
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn import_export_preserves_structure(tree in arb_imported_tree()) {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _guard = rt.enter();
