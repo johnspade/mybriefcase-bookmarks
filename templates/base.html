@@ -51,8 +51,7 @@
     <div class="sidebar-header">Bookmarks</div>
     <div class="sidebar-tree" id="sidebar-tree">{{ sidebar_html|safe }}</div>
     <div class="sidebar-footer">
-      <button type="button" class="sidebar-action-btn" @click="$store.app.sidebarOpen = false; $store.app.showImportModal = true">Import Bookmarks</button>
-      <a class="sidebar-action-btn" href="/export" download="bookmarks.html">Export Bookmarks</a>
+      <a class="sidebar-action-btn" href="/settings" @click="$store.app.sidebarOpen = false">Settings</a>
     </div>
   </div>
 
@@ -64,7 +63,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
           New Folder
         </button>
-        <button type="button" class="fab-menu-item" @click="open = false; $store.app.showAddModal = true">
+        <button type="button" class="fab-menu-item" @click="open = false; $store.app.prefillTitle = ''; $store.app.prefillUrl = ''; $store.app.showAddModal = true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
           New Bookmark
         </button>
@@ -102,15 +101,20 @@
     <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="add-bookmark-title" @keydown.tab="trapFocus($event)">
       <h2 id="add-bookmark-title">Add Bookmark</h2>
       <form hx-post="/bookmarks/new" hx-target="#folder-content" hx-swap="innerHTML"
-            x-init="htmx.process($el)">
-        <input type="hidden" name="folder_id" :value="getCurrentFolderId()">
+            @htmx:after-request="$store.app.showAddModal = false"
+            x-init="htmx.process($el); htmx.ajax('GET', '/folder-options', {target: $refs.folderSelect, swap: 'innerHTML'}).then(() => { $refs.folderSelect.value = getCurrentFolderId(); }); $nextTick(() => $refs.modalName.focus())">
         <div class="detail-field">
           <label>Name</label>
-          <input type="text" name="title" placeholder="Bookmark name" required x-ref="modalName" x-init="$el.focus()">
+          <input type="text" name="title" placeholder="Bookmark name" required x-ref="modalName" :value="$store.app.prefillTitle || ''">
         </div>
         <div class="detail-field">
           <label>URL</label>
-          <input type="text" name="url" placeholder="https://example.com" required>
+          <input type="text" name="url" placeholder="https://example.com" required :value="$store.app.prefillUrl || ''">
+        </div>
+        <div class="detail-field">
+          <label>Folder</label>
+          <select name="folder_id" x-ref="folderSelect">
+          </select>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="$store.app.showAddModal = false">Cancel</button>
@@ -136,36 +140,6 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="$store.app.showFolderModal = false">Cancel</button>
           <button type="submit" class="btn btn-primary">Create</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</template>
-
-<!-- Import Bookmarks Modal -->
-<template x-if="$store.app.showImportModal">
-  <div class="modal-overlay" @click.self="$store.app.showImportModal = false" @keydown.escape.window="$store.app.showImportModal = false">
-    <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="import-title" @keydown.tab="trapFocus($event)">
-      <h2 id="import-title">Import Bookmarks</h2>
-      <form hx-post="/import" hx-target="#folder-content" hx-swap="innerHTML"
-            hx-encoding="multipart/form-data"
-            x-init="htmx.process($el)">
-        <input type="hidden" name="folder_id" :value="getCurrentFolderId()">
-        <div class="detail-field">
-          <label>Import to</label>
-          <select name="target">
-            <option value="root">Root folder</option>
-            <option value="current">Current folder</option>
-            <option value="new">New "Imported" folder</option>
-          </select>
-        </div>
-        <div class="detail-field">
-          <label>HTML Bookmarks File</label>
-          <input type="file" name="file" accept=".html,.htm" required x-ref="importFile">
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" @click="$store.app.showImportModal = false">Cancel</button>
-          <button type="submit" class="btn btn-primary">Import</button>
         </div>
       </form>
     </div>

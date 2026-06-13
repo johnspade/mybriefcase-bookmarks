@@ -34,6 +34,9 @@ fn build_views_app() -> (Router, String) {
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
         .route("/bookmarks/new", post(views::create_bookmark_html))
+        .route("/settings", get(views::settings_page))
+        .route("/folder-options", get(views::folder_options))
+        .route("/import", post(views::import_bookmarks_html))
         .route("/items/move", post(views::move_item_html))
         .route("/move-picker/{id}", get(views::move_picker_html))
         .with_state(state);
@@ -61,6 +64,9 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
         .route("/bookmarks/new", post(views::create_bookmark_html))
+        .route("/settings", get(views::settings_page))
+        .route("/folder-options", get(views::folder_options))
+        .route("/import", post(views::import_bookmarks_html))
         .route("/items/move", post(views::move_item_html))
         .route("/move-picker/{id}", get(views::move_picker_html))
         .with_state(state);
@@ -486,4 +492,183 @@ async fn move_picker_shows_current_parent() {
     let (status, html) = get_html(app, &format!("/move-picker/{bm_id}")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("(current)"));
+}
+
+// ─── Settings & bookmarklet page tests ────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn settings_page_renders() {
+    let (app, _root_id) = build_views_app();
+
+    let (status, html) = get_html(app, "/settings").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains("Bookmarklet"),
+        "should have bookmarklet section"
+    );
+    assert!(html.contains("Import"), "should have import section");
+    assert!(html.contains("Export"), "should have export section");
+    assert!(
+        html.contains("buildBookmarklet"),
+        "should reference bookmarklet JS"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn create_bookmark_returns_folder_html() {
+    let (app, root_id) = build_views_app();
+
+    let body = format!("folder_id={root_id}&url=https%3A%2F%2Fexample.com&title=Test");
+    let resp = app
+        .oneshot(
+            Request::post("/bookmarks/new")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8_lossy(&bytes).to_string();
+    assert!(html.contains("Test"), "should return folder content HTML");
+}
+
+// ─── Folder options endpoint tests ────────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_options_returns_option_elements() {
+    let (app, root_id) = build_views_app();
+
+    let (status, html) = get_html(app, "/folder-options").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("<option"), "should return option elements");
+    assert!(html.contains(&root_id), "should contain the root folder id");
+    assert!(
+        html.contains("Bookmarks"),
+        "should contain the root folder name"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_options_includes_subfolders() {
+    let (app, root_id, doc_handle) = build_views_app_with_handle();
+
+    ops::create_folder(&doc_handle, &root_id, "Sub Folder").unwrap();
+
+    let (status, html) = get_html(app, "/folder-options").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("Sub Folder"), "should list the subfolder");
+}
+
+// ─── Import endpoint tests ────────────────────────────
+
+fn multipart_body(target: &str, file_content: &str) -> (String, Vec<u8>) {
+    let boundary = "----TestBoundary123";
+    let mut body = Vec::new();
+    body.extend_from_slice(format!("------TestBoundary123\r\nContent-Disposition: form-data; name=\"target\"\r\n\r\n{target}\r\n").as_bytes());
+    body.extend_from_slice(format!("------TestBoundary123\r\nContent-Disposition: form-data; name=\"file\"; filename=\"bookmarks.html\"\r\nContent-Type: text/html\r\n\r\n{file_content}\r\n").as_bytes());
+    body.extend_from_slice(b"------TestBoundary123--\r\n");
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn import_to_root_creates_bookmarks() {
+    let (app, _root_id) = build_views_app();
+
+    let html_file = r#"<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL><p>
+<DT><A HREF="https://example.com">Example</A>
+<DT><A HREF="https://rust-lang.org">Rust</A>
+</DL>"#;
+
+    let (content_type, body) = multipart_body("root", html_file);
+    let resp = app
+        .oneshot(
+            Request::post("/import")
+                .header("content-type", content_type)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8_lossy(&bytes).to_string();
+    assert!(html.contains("Example"), "should contain imported bookmark");
+    assert!(
+        html.contains("Rust"),
+        "should contain second imported bookmark"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn import_to_new_folder_creates_subfolder() {
+    let (app, _root_id) = build_views_app();
+
+    let html_file = r#"<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL><p>
+<DT><A HREF="https://example.com">Example</A>
+</DL>"#;
+
+    let (content_type, body) = multipart_body("new", html_file);
+    let resp = app
+        .oneshot(
+            Request::post("/import")
+                .header("content-type", content_type)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8_lossy(&bytes).to_string();
+    assert!(html.contains("Example"), "should contain imported bookmark");
+    assert!(
+        html.contains("Imported"),
+        "should show imported folder context"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn import_empty_file_returns_bad_request() {
+    let (app, _root_id) = build_views_app();
+
+    let (content_type, body) = multipart_body("root", "");
+    let resp = app
+        .oneshot(
+            Request::post("/import")
+                .header("content-type", content_type)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn import_invalid_html_returns_bad_request() {
+    let (app, _root_id) = build_views_app();
+
+    let (content_type, body) = multipart_body("root", "<p>Not a bookmarks file</p>");
+    let resp = app
+        .oneshot(
+            Request::post("/import")
+                .header("content-type", content_type)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }

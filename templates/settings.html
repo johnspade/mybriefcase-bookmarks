@@ -1,0 +1,42 @@
+<div class="settings-page">
+  <h2>Settings</h2>
+
+  <section class="settings-section">
+    <h3>Bookmarklet</h3>
+    <p>Drag this button to your browser's bookmarks toolbar to quickly save pages.</p>
+    <div class="bookmarklet-container" x-data x-init="$refs.bmLink.href = buildBookmarklet()">
+      <a class="bookmarklet-link" href="javascript:void(0)" x-ref="bmLink">+ MyBriefcase</a>
+    </div>
+    <p class="settings-help">If the bookmarks bar is hidden, press <kbd>Ctrl+Shift+B</kbd> (or <kbd>Cmd+Shift+B</kbd> on macOS) to show it.</p>
+  </section>
+
+  <section class="settings-section">
+    <h3>Import</h3>
+    <p>Upload an HTML bookmarks file exported from any browser.</p>
+    <form hx-post="/import" hx-swap="none"
+          hx-encoding="multipart/form-data"
+          @htmx:after-request.camel="if($event.detail.successful) window.location.href='/'"
+          x-data x-init="htmx.process($el)">
+      <div class="detail-field">
+        <label for="import-target">Import to</label>
+        <select id="import-target" name="target">
+          <option value="root">Root folder</option>
+          <option value="new">New "Imported" folder</option>
+        </select>
+      </div>
+      <div class="detail-field">
+        <label for="import-file">File</label>
+        <input type="file" id="import-file" name="file" accept=".html,.htm" required>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">Import</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="settings-section">
+    <h3>Export</h3>
+    <p>Download all bookmarks as an HTML file (Netscape format, compatible with all browsers).</p>
+    <a class="btn btn-primary" href="/export" download="bookmarks.html" style="display:inline-flex">Export Bookmarks</a>
+  </section>
+</div>

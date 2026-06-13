@@ -1,4 +1,4 @@
-/* exported getCurrentFolderId, toggleChevron, toggleTheme, trapFocus, openNewFolderPrompt, initApp, formatLocalDates */
+/* exported getCurrentFolderId, toggleChevron, toggleTheme, trapFocus, openNewFolderPrompt, initApp, formatLocalDates, buildBookmarklet */
 
 function getCurrentFolderId() {
   const el = document.getElementById('current-folder-id');
@@ -69,6 +69,11 @@ function formatLocalDates() {
   });
 }
 
+function buildBookmarklet() {
+  const origin = window.location.origin;
+  return "javascript:void(window.open('" + origin + "/?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'_blank'))";
+}
+
 function initApp() {
   const savedPref = localStorage.getItem('theme-preference') || 'system';
   const effectiveTheme = (savedPref === 'system') ? getSystemTheme() : savedPref;
@@ -84,12 +89,13 @@ function initApp() {
     sortOrder: savedSortOrder,
     showAddModal: false,
     showFolderModal: false,
-    showImportModal: false,
     showEditModal: false,
     showMoveModal: false,
     sidebarOpen: false,
     detailOpen: false,
     searchExpanded: false,
+    prefillTitle: '',
+    prefillUrl: '',
     openMovePicker: function(itemId) {
       htmx.ajax('GET', '/move-picker/' + itemId, {target: '#move-picker-body', swap: 'innerHTML'}).then(function() {
         Alpine.store('app').showMoveModal = true;
@@ -106,6 +112,14 @@ function initApp() {
       }
     }
   });
+
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('url') || urlParams.has('title')) {
+    Alpine.store('app').prefillTitle = urlParams.get('title') || '';
+    Alpine.store('app').prefillUrl = urlParams.get('url') || '';
+    Alpine.store('app').showAddModal = true;
+    history.replaceState(null, '', window.location.pathname);
+  }
 
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
     const store = Alpine.store('app');
@@ -274,12 +288,13 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     Alpine.store('app').showAddModal = false;
     Alpine.store('app').showFolderModal = false;
-    Alpine.store('app').showImportModal = false;
     Alpine.store('app').showEditModal = false;
     Alpine.store('app').showMoveModal = false;
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
     e.preventDefault();
+    Alpine.store('app').prefillTitle = '';
+    Alpine.store('app').prefillUrl = '';
     Alpine.store('app').showAddModal = true;
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') {

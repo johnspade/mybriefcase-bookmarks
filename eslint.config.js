@@ -30,6 +30,7 @@ export default [
         clearInterval: "readonly",
         encodeURIComponent: "readonly",
         EventSource: "readonly",
+        URLSearchParams: "readonly",
       },
     },
   },

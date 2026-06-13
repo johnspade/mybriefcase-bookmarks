@@ -109,6 +109,8 @@ fn build_router(state: Arc<api::AppState>) -> Router {
         )
         .route("/api/bookmarks/{id}/revert", post(api::revert_bookmark))
         .route("/api/move", post(api::move_item))
+        .route("/settings", get(views::settings_page))
+        .route("/folder-options", get(views::folder_options))
         .route("/import", post(views::import_bookmarks_html))
         .route("/export", get(api::export_bookmarks))
         .nest_service("/static", ServeEmbed::<StaticAssets>::new())

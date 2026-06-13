@@ -186,6 +186,18 @@ struct EditBookmarkTemplate {
 #[template(path = "detail_empty.html")]
 struct DetailEmptyTemplate;
 
+#[derive(Template)]
+#[template(path = "settings.html")]
+struct SettingsTemplate;
+
+#[derive(Template)]
+#[template(path = "settings_base.html")]
+struct SettingsBaseTemplate {
+    content_html: String,
+    page_title: String,
+    static_v: String,
+}
+
 // ─── Helpers ────────────────────────────────────────
 
 fn read_store(doc_handle: &DocHandle) -> Result<BookmarkStore, StatusCode> {
@@ -543,6 +555,35 @@ pub async fn index_page(
         content_html,
         current_folder_id: root_id,
         page_title: "MyBriefcase Bookmarks".to_string(),
+        static_v: state.static_version.clone(),
+    };
+
+    Ok(Html(render(&page)?))
+}
+
+/// # Errors
+/// Returns `500 Internal Server Error` if template rendering fails.
+pub async fn folder_options(
+    State(state): State<Arc<AppState>>,
+) -> Result<Html<String>, StatusCode> {
+    let store = read_store(&state.doc_handle)?;
+    let root_id = store.root_folder_id.clone();
+    let folders = collect_all_folder_paths(&store, &root_id);
+    let mut html = String::new();
+    for (id, path) in &folders {
+        write!(html, "<option value=\"{id}\">{path}</option>").unwrap();
+    }
+    Ok(Html(html))
+}
+
+/// # Errors
+/// Returns `500 Internal Server Error` if template rendering fails.
+pub async fn settings_page(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
+    let content_html = render(&SettingsTemplate)?;
+
+    let page = SettingsBaseTemplate {
+        content_html,
+        page_title: "Settings — MyBriefcase Bookmarks".to_string(),
         static_v: state.static_version.clone(),
     };
 
@@ -965,6 +1006,17 @@ fn collect_descendants(
     }
 }
 
+fn collect_all_folder_paths(store: &BookmarkStore, root_id: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let exclude = std::collections::HashSet::new();
+    let mut full = Vec::new();
+    collect_folder_paths(store, root_id, "", &exclude, "", &mut full);
+    for (id, path, _) in full {
+        out.push((id, path));
+    }
+    out
+}
+
 fn collect_folder_paths(
     store: &BookmarkStore,
     folder_id: &str,
@@ -1262,16 +1314,12 @@ pub async fn import_bookmarks_html(
     mut multipart: axum::extract::Multipart,
 ) -> Result<Html<String>, StatusCode> {
     let mut target = String::new();
-    let mut folder_id = String::new();
     let mut file_content = Vec::new();
 
     while let Ok(Some(field)) = multipart.next_field().await {
         match field.name() {
             Some("target") => {
                 target = field.text().await.unwrap_or_default();
-            }
-            Some("folder_id") => {
-                folder_id = field.text().await.unwrap_or_default();
             }
             Some("file") => {
                 file_content = field.bytes().await.unwrap_or_default().to_vec();
@@ -1293,7 +1341,6 @@ pub async fn import_bookmarks_html(
 
     let store = read_store(&state.doc_handle)?;
     let target_folder_id = match target.as_str() {
-        "current" if store.folders.contains_key(&folder_id) => folder_id,
         "new" => {
             let name = format!("Imported {}", chrono::Utc::now().format("%Y-%m-%d"));
             ops::create_folder(&state.doc_handle, &store.root_folder_id, &name)
