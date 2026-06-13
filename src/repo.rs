@@ -1,5 +1,5 @@
 use automerge::transaction::Transactable;
-use automerge::{Automerge, ObjType};
+use automerge::{Automerge, ObjType, ReadDoc, Value};
 use automerge_repo::tokio::FsStorage;
 use automerge_repo::{DocHandle, DocumentId, Repo, RepoHandle};
 use std::path::Path;
@@ -104,7 +104,7 @@ pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: 
             continue;
         };
         let peer_id = name.to_string_lossy().to_string();
-        if peer_id == own_client_id || peer_id.starts_with('.') {
+        if peer_id == own_client_id || peer_id.starts_with('.') || peer_id == "favicons" {
             continue;
         }
 
@@ -142,6 +142,54 @@ pub fn export_doc_to_shared(doc_handle: &DocHandle, sync_root: &Path, client_id:
     std::fs::rename(&tmp, &dest).ok();
 }
 
+pub fn migrate_add_favicon_field(doc_handle: &DocHandle) {
+    doc_handle.with_doc_mut(|doc| {
+        let Ok(Some((_, bookmarks))) = doc.get(automerge::ROOT, "bookmarks") else {
+            return;
+        };
+        let keys: Vec<String> = doc.keys(&bookmarks).collect();
+        let mut needs_migration = Vec::new();
+        for key in &keys {
+            let Ok(Some((_, bm_obj))) = doc.get(&bookmarks, key.as_str()) else {
+                continue;
+            };
+            if doc.get(&bm_obj, "favicon").ok().flatten().is_none() {
+                needs_migration.push(key.clone());
+            }
+        }
+        if needs_migration.is_empty() {
+            return;
+        }
+        let mut tx = doc.transaction();
+        for key in &needs_migration {
+            if let Ok(Some((_, bm_obj))) = tx.get(&bookmarks, key.as_str()) {
+                let _ = tx.put(&bm_obj, "favicon", "");
+            }
+        }
+        if let Ok(Some((_, meta))) = tx.get(automerge::ROOT, "meta") {
+            let version = tx
+                .get(&meta, "schema_version")
+                .ok()
+                .flatten()
+                .and_then(|(v, _)| {
+                    if let Value::Scalar(s) = &v {
+                        s.to_u64()
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(1);
+            if version < 2 {
+                let _ = tx.put(&meta, "schema_version", 2_u64);
+            }
+        }
+        tx.commit_with(
+            automerge::transaction::CommitOptions::default()
+                .with_message("migrate:add_favicon_field".to_string()),
+        );
+    });
+}
+
 fn walk_files(dir: &Path) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
     walk_files_inner(dir, &mut files);
@@ -156,5 +204,79 @@ fn walk_files_inner(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
         } else if path.is_file() {
             files.push(path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use automerge::transaction::CommitOptions;
+    use automerge_repo::Repo;
+    use autosurgeon::hydrate;
+
+    use crate::model::BookmarkStore;
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_migration_adds_favicon_field() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let store = FsStorage::open(temp_dir.path()).unwrap();
+        let repo = Repo::new(None, Box::new(store));
+        let handle = repo.run();
+        let doc_handle = handle.new_document();
+
+        // Create a document without the favicon field (old schema)
+        doc_handle.with_doc_mut(|doc| {
+            let mut tx = doc.transaction();
+            let now = chrono::Utc::now().to_rfc3339();
+            let root_id = uuid::Uuid::new_v4().to_string();
+            tx.put(automerge::ROOT, "root_folder_id", root_id.as_str())
+                .unwrap();
+            let folders = tx
+                .put_object(automerge::ROOT, "folders", ObjType::Map)
+                .unwrap();
+            let bookmarks = tx
+                .put_object(automerge::ROOT, "bookmarks", ObjType::Map)
+                .unwrap();
+            let meta = tx
+                .put_object(automerge::ROOT, "meta", ObjType::Map)
+                .unwrap();
+            tx.put(&meta, "schema_version", 1_u64).unwrap();
+            tx.put(&meta, "collection_name", "bookmarks").unwrap();
+
+            let root = tx
+                .put_object(&folders, root_id.as_str(), ObjType::Map)
+                .unwrap();
+            tx.put(&root, "title", "Bookmarks").unwrap();
+            tx.put_object(&root, "children", ObjType::List).unwrap();
+            tx.put(&root, "created_at", now.as_str()).unwrap();
+            tx.put(&root, "updated_at", now.as_str()).unwrap();
+            tx.put(&root, "deleted", false).unwrap();
+
+            // Add a bookmark WITHOUT the favicon field
+            let bm = tx.put_object(&bookmarks, "bm-1", ObjType::Map).unwrap();
+            tx.put(&bm, "url", "https://example.com").unwrap();
+            tx.put(&bm, "title", "Example").unwrap();
+            tx.put(&bm, "notes", "").unwrap();
+            tx.put(&bm, "created_at", now.as_str()).unwrap();
+            tx.put(&bm, "updated_at", now.as_str()).unwrap();
+            tx.put(&bm, "deleted", false).unwrap();
+            // Note: no "favicon" field
+
+            tx.commit_with(CommitOptions::default().with_message("test_init"));
+        });
+
+        // Hydration should fail before migration
+        let result = doc_handle.with_doc(hydrate::<_, BookmarkStore>);
+        assert!(result.is_err());
+
+        // Run migration
+        migrate_add_favicon_field(&doc_handle);
+
+        // Hydration should succeed after migration
+        let store = doc_handle.with_doc(|doc| hydrate::<_, BookmarkStore>(doc).unwrap());
+        let bm = store.bookmarks.get("bm-1").unwrap();
+        assert_eq!(bm.favicon, "");
+        assert_eq!(store.meta.schema_version, 2);
     }
 }

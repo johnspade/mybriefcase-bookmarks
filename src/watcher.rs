@@ -65,7 +65,7 @@ pub fn extract_peer_ids<S: std::hash::BuildHasher>(
         if let Ok(rel) = path.strip_prefix(sync_root) {
             if let Some(first) = rel.components().next() {
                 let peer = first.as_os_str().to_string_lossy().to_string();
-                if peer != own_id && !peer.starts_with('.') {
+                if peer != own_id && !peer.starts_with('.') && peer != "favicons" {
                     peers.insert(peer);
                 }
             }
@@ -137,7 +137,7 @@ impl PollState {
                 continue;
             };
             let peer_id = name.to_string_lossy().to_string();
-            if peer_id == own_client_id || peer_id.starts_with('.') {
+            if peer_id == own_client_id || peer_id.starts_with('.') || peer_id == "favicons" {
                 continue;
             }
 
@@ -423,5 +423,14 @@ mod tests {
         assert_eq!(peers.len(), 2);
         assert!(peers.contains("peer-a"));
         assert!(peers.contains("peer-b"));
+    }
+
+    #[test]
+    fn test_extract_peer_ids_ignores_favicons_dir() {
+        let sync_root = Path::new("/data/sync");
+        let event = make_event(&["/data/sync/favicons/abc123.png"]);
+        let mut peers = HashSet::new();
+        extract_peer_ids(&event, sync_root, "my-client", &mut peers);
+        assert!(peers.is_empty());
     }
 }

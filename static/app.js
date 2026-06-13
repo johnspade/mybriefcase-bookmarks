@@ -71,7 +71,7 @@ function formatLocalDates() {
 
 function buildBookmarklet() {
   const origin = window.location.origin;
-  return "javascript:void(window.open('" + origin + "/?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'_blank'))";
+  return "javascript:void((function(){var i=document.querySelector('link[rel~=\"icon\"]');var f=(i&&i.href&&i.href.indexOf('data:')!==0)?i.href:'';window.open('" + origin + "/?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)+'&favicon_url='+encodeURIComponent(f),'_blank')})())";
 }
 
 function initApp() {
@@ -99,6 +99,7 @@ function initApp() {
     searchExpanded: false,
     prefillTitle: '',
     prefillUrl: '',
+    prefillFaviconUrl: '',
     openRenameFolder: function(id, title) {
       this.renameFolderId = id;
       this.renameFolderTitle = title;
@@ -125,6 +126,7 @@ function initApp() {
   if (urlParams.has('url') || urlParams.has('title')) {
     Alpine.store('app').prefillTitle = urlParams.get('title') || '';
     Alpine.store('app').prefillUrl = urlParams.get('url') || '';
+    Alpine.store('app').prefillFaviconUrl = urlParams.get('favicon_url') || '';
     Alpine.store('app').showAddModal = true;
     history.replaceState(null, '', window.location.pathname);
   }
@@ -306,6 +308,7 @@ document.addEventListener('keydown', function(e) {
     e.preventDefault();
     Alpine.store('app').prefillTitle = '';
     Alpine.store('app').prefillUrl = '';
+    Alpine.store('app').prefillFaviconUrl = '';
     Alpine.store('app').showAddModal = true;
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') {

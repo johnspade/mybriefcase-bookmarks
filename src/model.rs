@@ -23,6 +23,7 @@ pub struct Bookmark {
     pub url: String,
     pub title: String,
     pub notes: String,
+    pub favicon: String,
     pub created_at: String,
     pub updated_at: String,
     pub deleted: bool,
