@@ -59,10 +59,7 @@ pub async fn fetch_and_store(sync_root: &Path, favicon_url: &str) -> anyhow::Res
     Err(last_err.unwrap_or_else(|| anyhow::anyhow!("favicon fetch failed")))
 }
 
-async fn attempt_fetch(
-    client: &reqwest::Client,
-    url: &str,
-) -> anyhow::Result<(Vec<u8>, String)> {
+async fn attempt_fetch(client: &reqwest::Client, url: &str) -> anyhow::Result<(Vec<u8>, String)> {
     let resp = client.get(url).send().await?.error_for_status()?;
     let content_type = resp
         .headers()
