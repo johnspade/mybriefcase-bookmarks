@@ -515,6 +515,7 @@ body.drawer-open { overflow: hidden; }
   .toolbar { height: 48px; }
   .toolbar-btn { width: 44px; height: 44px; }
   .toolbar-btn svg { width: 20px; height: 20px; }
+  .detail-close svg { width: 20px; height: 20px; }
   .search-bar { height: 36px; }
   .theme-btn { width: 44px; height: 44px; }
 
