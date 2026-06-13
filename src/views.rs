@@ -352,7 +352,7 @@ fn build_sidebar_folder(
         let open_cls = if is_open { " open" } else { "" };
         let _ = write!(
             html,
-            r#"<span class="chevron{open_cls}" onclick="event.stopPropagation();toggleChevron(this)"><svg width="10" height="10" viewBox="7 4 10 16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></span>"#,
+            r#"<span class="chevron{open_cls}" onclick="event.stopPropagation();toggleChevron(this)"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></span>"#,
         );
     } else {
         html.push_str(r#"<span style="width:14px;flex-shrink:0"></span>"#);
