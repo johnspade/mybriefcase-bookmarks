@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="64" height="64" shape-rendering="crispEdges">
+  <!-- Win95 Briefcase + Bookmark — clean pixel art -->
+
+  <!-- Handle -->
+  <rect x="12" y="4" width="8" height="1" fill="#000"/>
+  <rect x="11" y="5" width="1" height="5" fill="#000"/>
+  <rect x="20" y="5" width="1" height="5" fill="#000"/>
+  <rect x="12" y="5" width="8" height="1" fill="#808000"/>
+  <rect x="12" y="5" width="1" height="4" fill="#c0c000"/>
+  <rect x="19" y="5" width="1" height="4" fill="#404000"/>
+  <rect x="12" y="8" width="8" height="1" fill="#404000"/>
+  <!-- Handle hole -->
+  <rect x="13" y="6" width="6" height="2" fill="#000"/>
+
+  <!-- Body outline -->
+  <rect x="3" y="9" width="26" height="1" fill="#000"/>
+  <rect x="2" y="10" width="1" height="19" fill="#000"/>
+  <rect x="29" y="10" width="1" height="19" fill="#000"/>
+  <rect x="3" y="29" width="26" height="1" fill="#000"/>
+
+  <!-- Body fill -->
+  <rect x="3" y="10" width="26" height="19" fill="#808000"/>
+
+  <!-- Outer bevel highlight (top + left) -->
+  <rect x="3" y="10" width="26" height="1" fill="#c0c000"/>
+  <rect x="3" y="10" width="1" height="19" fill="#c0c000"/>
+
+  <!-- Outer bevel shadow (bottom + right) -->
+  <rect x="3" y="28" width="26" height="1" fill="#404000"/>
+  <rect x="28" y="10" width="1" height="19" fill="#404000"/>
+
+  <!-- Upper section fill -->
+  <rect x="4" y="11" width="24" height="7" fill="#999900"/>
+
+  <!-- Belt strap -->
+  <rect x="3" y="18" width="26" height="2" fill="#404000"/>
+
+  <!-- Lower section / pocket -->
+  <rect x="4" y="20" width="24" height="8" fill="#666600"/>
+  <!-- Pocket inner bevel -->
+  <rect x="4" y="20" width="24" height="1" fill="#808000"/>
+  <rect x="4" y="20" width="1" height="8" fill="#808000"/>
+  <rect x="27" y="20" width="1" height="8" fill="#333300"/>
+  <rect x="4" y="27" width="24" height="1" fill="#333300"/>
+
+  <!-- Clasp -->
+  <rect x="13" y="15" width="6" height="6" fill="#c0c000"/>
+  <rect x="13" y="15" width="6" height="1" fill="#ffff00"/>
+  <rect x="13" y="15" width="1" height="6" fill="#ffff00"/>
+  <rect x="18" y="15" width="1" height="6" fill="#808000"/>
+  <rect x="13" y="20" width="6" height="1" fill="#808000"/>
+  <!-- Keyhole -->
+  <rect x="15" y="18" width="2" height="1" fill="#404000"/>
+
+  <!-- Bookmark — 7px wide, flat top, 5-step staircase V-notch -->
+  <!-- Main body -->
+  <rect x="22" y="2" width="7" height="14" fill="#cc0000"/>
+  <!-- Highlight left edge -->
+  <rect x="22" y="2" width="1" height="14" fill="#ff2020"/>
+  <!-- Shadow right edge -->
+  <rect x="28" y="2" width="1" height="14" fill="#800000"/>
+  <!-- Flat top edge -->
+  <rect x="22" y="2" width="7" height="1" fill="#ff4040"/>
+  <!-- 5-step staircase V cut from bottom up:
+       Row 15: full width cut (7px) — outermost step
+       Row 14: 5px cut
+       Row 13: 3px cut
+       Row 12: 1px cut (center pixel)
+       Background color fills the notch -->
+  <rect x="22" y="15" width="7" height="1" fill="#999900"/>
+  <rect x="23" y="14" width="5" height="1" fill="#999900"/>
+  <rect x="24" y="13" width="3" height="1" fill="#999900"/>
+  <rect x="25" y="12" width="1" height="1" fill="#999900"/>
+</svg>
