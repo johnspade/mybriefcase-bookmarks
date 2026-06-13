@@ -618,19 +618,19 @@ body.drawer-open { overflow: hidden; }
 
 }
 
-/* ─── Settings page container ────────────────────────── */
-#folder-content:has(.settings-page) {
+/* ─── Settings layout (full-page, no sidebars) ─────── */
+.settings-layout {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-6) var(--space-4);
+  min-height: calc(100dvh - 36px);
   overflow-y: auto;
-  align-items: center;
-  justify-content: flex-start;
 }
 
 /* ─── Settings page ─────────────────────────────────── */
 .settings-page {
-  padding: var(--space-4) var(--space-6);
   width: 100%;
   max-width: 520px;
-  margin: 0 auto;
 }
 .settings-page h2 {
   font-size: var(--text-lg);

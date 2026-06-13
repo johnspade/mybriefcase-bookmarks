@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ page_title }}</title>
+<meta name="description" content="MyBriefcase Bookmarks — local-first bookmark manager with Automerge CRDT sync">
+<script src="/static/vendor/htmx.min.js?v={{ static_v }}"></script>
+<script defer src="/static/vendor/alpine.min.js?v={{ static_v }}"></script>
+<link rel="stylesheet" href="/static/style.css?v={{ static_v }}">
+<script>
+(function() {
+  var p = localStorage.getItem('theme-preference');
+  if (p === 'light' || p === 'dark') document.documentElement.setAttribute('data-theme', p);
+})();
+</script>
+</head>
+<body x-data x-init="initApp()">
+
+<div class="toolbar">
+  <a href="/" class="toolbar-btn" title="Back to bookmarks" aria-label="Back to bookmarks">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+  </a>
+  <div class="toolbar-spacer"></div>
+  <button type="button" class="theme-btn" @click="toggleTheme()" :title="'Theme: ' + $store.app.themePreference" aria-label="Toggle theme" :aria-label="'Theme: ' + $store.app.themePreference">
+    <svg x-cloak x-show="$store.app.themePreference === 'system'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    <svg x-cloak x-show="$store.app.themePreference === 'light'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <svg x-cloak x-show="$store.app.themePreference === 'dark'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div>
+
+<main class="settings-layout">
+  {{ content_html|safe }}
+</main>
+
+<script src="/static/app.js?v={{ static_v }}"></script>
+</body>
+</html>

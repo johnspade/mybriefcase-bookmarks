@@ -16,12 +16,10 @@
     <form hx-post="/import" hx-target="#folder-content" hx-swap="innerHTML"
           hx-encoding="multipart/form-data"
           x-data x-init="htmx.process($el)">
-      <input type="hidden" name="folder_id" :value="getCurrentFolderId()">
       <div class="detail-field">
         <label for="import-target">Import to</label>
         <select id="import-target" name="target">
           <option value="root">Root folder</option>
-          <option value="current">Current folder</option>
           <option value="new">New "Imported" folder</option>
         </select>
       </div>
