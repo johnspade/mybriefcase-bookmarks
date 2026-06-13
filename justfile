@@ -35,3 +35,6 @@ generate-schema:
 
 build:
     cargo build --release
+
+nix-check:
+    nix flake check

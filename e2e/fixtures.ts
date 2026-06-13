@@ -8,6 +8,7 @@ import * as net from 'net';
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 function getBinaryPath(): string {
+  if (process.env.MBB_BINARY) return process.env.MBB_BINARY;
   try {
     const meta = JSON.parse(
       execSync('cargo metadata --format-version 1 --no-deps', {
