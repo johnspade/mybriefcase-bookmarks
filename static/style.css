@@ -546,7 +546,7 @@ body.drawer-open { overflow: hidden; }
   .detail-panel.open { transform: translateX(0); }
 
   .tree-item { min-height: 44px; padding: var(--space-2) var(--space-3); }
-  .tree-item .chevron { width: 44px; height: 44px; margin: calc(-1 * var(--space-2)) 0; }
+  .tree-item .chevron { width: 24px; height: 44px; margin: calc(-1 * var(--space-2)) 0; }
 
   .list-item { min-height: 44px; padding: var(--space-2) var(--space-3); }
 
