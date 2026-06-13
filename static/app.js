@@ -139,8 +139,9 @@ function initApp() {
   });
 
   document.body.addEventListener('htmx:afterSwap', function(e) {
-    if (e.detail.target && e.detail.target.id === 'detail-body' && isMobile()) {
-      Alpine.store('app').detailOpen = true;
+    if (e.detail.target && e.detail.target.id === 'detail-body') {
+      htmx.process(e.detail.target);
+      if (isMobile()) Alpine.store('app').detailOpen = true;
     }
   });
 
@@ -153,6 +154,18 @@ function initApp() {
   document.body.addEventListener('htmx:afterSwap', function(e) {
     if (e.detail.target && e.detail.target.id === 'edit-modal-body') {
       Alpine.store('app').showEditModal = true;
+    }
+  });
+
+  document.body.addEventListener('htmx:afterSettle', function(e) {
+    const path = e.detail.pathInfo && e.detail.pathInfo.requestPath;
+    if (!path) return;
+    if (path === '/bookmarks/new') {
+      Alpine.store('app').showAddModal = false;
+    } else if (path === '/folders/new') {
+      Alpine.store('app').showFolderModal = false;
+    } else if (path === '/import') {
+      Alpine.store('app').showImportModal = false;
     }
   });
 
@@ -190,6 +203,8 @@ function initApp() {
     let retryDelay = 1000;
     const maxRetryDelay = 30000;
     let pendingRefresh = null;
+    let folderContentVersion = 0;
+    let sseSwapVersion = -1;
 
     function cancelPendingRefresh() {
       if (pendingRefresh) {
@@ -200,14 +215,20 @@ function initApp() {
 
     document.body.addEventListener('htmx:afterSwap', function(e) {
       if (e.detail.target && e.detail.target.id === 'folder-content') {
+        folderContentVersion++;
         cancelPendingRefresh();
       }
     });
 
-    document.body.addEventListener('htmx:beforeRequest', function(e) {
-      const fc = document.getElementById('folder-content');
-      if (fc && fc.contains(e.detail.elt)) {
-        cancelPendingRefresh();
+    const sseSource = document.createElement('div');
+    sseSource.id = 'sse-source';
+    sseSource.style.display = 'none';
+    document.body.appendChild(sseSource);
+
+    document.body.addEventListener('htmx:beforeSwap', function(e) {
+      if (e.detail.target && e.detail.target.id === 'folder-content' &&
+          e.detail.elt === sseSource && sseSwapVersion !== folderContentVersion) {
+        e.detail.shouldSwap = false;
       }
     });
 
@@ -216,6 +237,8 @@ function initApp() {
 
       evtSource.addEventListener('refresh', function() {
         retryDelay = 1000;
+        cancelPendingRefresh();
+
         const folderId = getCurrentFolderId();
 
         const statusEl = document.getElementById('status-text');
@@ -225,12 +248,13 @@ function initApp() {
                   {target: '#sidebar-tree', swap: 'innerHTML'});
 
         if (folderId) {
-          cancelPendingRefresh();
           pendingRefresh = setTimeout(function() {
             pendingRefresh = null;
+            if (folderContentVersion === sseSwapVersion) return;
+            sseSwapVersion = folderContentVersion;
             htmx.ajax('GET', '/folders/' + folderId + '/content',
-                      {target: '#folder-content', swap: 'innerHTML'});
-          }, 300);
+                      {target: '#folder-content', swap: 'innerHTML', source: sseSource});
+          }, 500);
         }
       });
 

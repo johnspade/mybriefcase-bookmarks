@@ -102,12 +102,11 @@
     <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="add-bookmark-title" @keydown.tab="trapFocus($event)">
       <h2 id="add-bookmark-title">Add Bookmark</h2>
       <form hx-post="/bookmarks/new" hx-target="#folder-content" hx-swap="innerHTML"
-            @htmx:after-request="$store.app.showAddModal = false"
-            x-init="htmx.process($el); $nextTick(() => $refs.modalName.focus())">
+            x-init="htmx.process($el)">
         <input type="hidden" name="folder_id" :value="getCurrentFolderId()">
         <div class="detail-field">
           <label>Name</label>
-          <input type="text" name="title" placeholder="Bookmark name" required x-ref="modalName">
+          <input type="text" name="title" placeholder="Bookmark name" required x-ref="modalName" x-init="$el.focus()">
         </div>
         <div class="detail-field">
           <label>URL</label>
@@ -128,12 +127,11 @@
     <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="new-folder-title" @keydown.tab="trapFocus($event)">
       <h2 id="new-folder-title">New Folder</h2>
       <form hx-post="/folders/new" hx-target="#folder-content" hx-swap="innerHTML"
-            @htmx:after-request="$store.app.showFolderModal = false"
-            x-init="htmx.process($el); $nextTick(() => $refs.folderName.focus())">
+            x-init="htmx.process($el)">
         <input type="hidden" name="parent_folder_id" :value="getCurrentFolderId()">
         <div class="detail-field">
           <label>Folder name</label>
-          <input type="text" name="title" placeholder="My Folder" required x-ref="folderName">
+          <input type="text" name="title" placeholder="My Folder" required x-ref="folderName" x-init="$el.focus()">
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="$store.app.showFolderModal = false">Cancel</button>
@@ -151,8 +149,7 @@
       <h2 id="import-title">Import Bookmarks</h2>
       <form hx-post="/import" hx-target="#folder-content" hx-swap="innerHTML"
             hx-encoding="multipart/form-data"
-            @htmx:after-request="$store.app.showImportModal = false"
-            x-init="htmx.process($el); $nextTick(() => $refs.importFile.focus())">
+            x-init="htmx.process($el)">
         <input type="hidden" name="folder_id" :value="getCurrentFolderId()">
         <div class="detail-field">
           <label>Import to</label>
