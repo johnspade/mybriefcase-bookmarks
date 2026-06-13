@@ -617,24 +617,36 @@ body.drawer-open { overflow: hidden; }
 
 }
 
+/* ─── Settings & Add Bookmark page containers ───────── */
+#folder-content:has(.settings-page),
+#folder-content:has(.add-bookmark-page) {
+  overflow-y: auto;
+  align-items: center;
+  justify-content: flex-start;
+}
+
 /* ─── Settings page ─────────────────────────────────── */
 .settings-page {
-  padding: var(--space-4);
-  max-width: 600px;
-  overflow-y: auto;
-  flex: 1;
+  padding: var(--space-6);
+  width: 100%;
+  max-width: 520px;
+  margin: var(--space-8) auto;
 }
 .settings-page h2 {
   font-size: var(--text-lg);
-  margin-bottom: var(--space-4);
+  font-weight: 600;
+  margin-bottom: var(--space-6);
 }
 .settings-section {
-  margin-bottom: var(--space-5);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border-light);
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-sm);
 }
 .settings-section:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 .settings-section h3 {
   font-size: var(--text-sm);
@@ -642,33 +654,38 @@ body.drawer-open { overflow: hidden; }
   margin-bottom: var(--space-2);
 }
 .settings-section p {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-muted);
   margin-bottom: var(--space-3);
+  line-height: 1.5;
 }
 .settings-help {
   font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: var(--space-2);
+  color: var(--text-faint);
+  margin-top: var(--space-3);
+  line-height: 1.5;
 }
 .settings-help kbd {
   font-family: inherit;
   background: var(--hover-bg);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
-  padding: var(--space-1);
-  font-size: var(--text-xs);
+  padding: var(--space-0-5) var(--space-1);
+  font-size: var(--text-3xs);
 }
 .bookmarklet-container {
-  padding: var(--space-3);
+  padding: var(--space-4);
   background: var(--hover-bg);
   border-radius: var(--radius-md);
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .bookmarklet-link {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-2) var(--space-3);
+  gap: var(--space-1-5);
+  padding: var(--space-2) var(--space-4);
   background: var(--accent);
   color: #fff;
   border-radius: var(--radius-md);
@@ -676,16 +693,37 @@ body.drawer-open { overflow: hidden; }
   font-size: var(--text-sm);
   font-weight: 500;
   cursor: grab;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition);
 }
+.bookmarklet-link:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.settings-section .detail-field { margin-bottom: var(--space-3); }
+.settings-section .modal-actions { margin-top: var(--space-4); }
 
 /* ─── Add bookmark page ─────────────────────────────── */
 .add-bookmark-page {
-  padding: var(--space-4);
-  max-width: 500px;
-  overflow-y: auto;
-  flex: 1;
+  width: 100%;
+  max-width: 420px;
+  margin: var(--space-8) auto;
+  padding: var(--space-6);
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 .add-bookmark-page h2 {
   font-size: var(--text-lg);
-  margin-bottom: var(--space-4);
+  font-weight: 600;
+  margin-bottom: var(--space-5);
+  text-align: center;
+}
+.add-bookmark-page .detail-field { margin-bottom: var(--space-3); }
+.add-bookmark-page .modal-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-5);
 }
