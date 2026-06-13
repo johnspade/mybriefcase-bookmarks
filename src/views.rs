@@ -63,6 +63,7 @@ pub struct BookmarkItemView {
     pub notes: String,
     pub created_at: String,
     pub created_date: String,
+    pub favicon: String,
     pub domain_color: String,
     pub domain_letter: String,
 }
@@ -80,6 +81,8 @@ pub struct CreateBookmarkForm {
     folder_id: String,
     url: String,
     title: String,
+    #[serde(default)]
+    favicon_url: String,
 }
 
 #[derive(Deserialize)]
@@ -155,6 +158,7 @@ struct DetailBookmarkTemplate {
     title: String,
     url: String,
     notes: String,
+    favicon: String,
     created_at: String,
     updated_at: String,
     created_date: String,
@@ -425,6 +429,7 @@ fn build_folder_items(
                     notes: bm.notes.clone(),
                     created_at: bm.created_at.clone(),
                     created_date: date_short(&bm.created_at),
+                    favicon: bm.favicon.clone(),
                     domain_color: domain_color(&bm.url),
                     domain_letter: domain_letter(&bm.url),
                 });
@@ -667,6 +672,7 @@ pub async fn bookmark_detail(
         title: bm.title.clone(),
         url: bm.url.clone(),
         notes: bm.notes.clone(),
+        favicon: bm.favicon.clone(),
         created_at: bm.created_at.clone(),
         updated_at: bm.updated_at.clone(),
         created_date: date_short(&bm.created_at),
@@ -733,9 +739,41 @@ pub async fn create_bookmark_html(
     State(state): State<Arc<AppState>>,
     Form(form): Form<CreateBookmarkForm>,
 ) -> Result<Html<String>, StatusCode> {
-    ops::add_bookmark(&state.doc_handle, &form.folder_id, &form.url, &form.title)
+    let id = ops::add_bookmark(&state.doc_handle, &form.folder_id, &form.url, &form.title)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     after_write(&state);
+
+    if !form.favicon_url.is_empty() && !form.favicon_url.starts_with("data:") {
+        let sync_root = state.sync_root.clone();
+        let doc_handle = state.doc_handle.clone();
+        let sse_tx = state.sse_tx.clone();
+        let favicon_url = form.favicon_url.clone();
+        let bookmark_url = form.url.clone();
+        let client_id = state.client_id.clone();
+        tokio::spawn(async move {
+            if let Ok(filename) = crate::favicon::fetch_and_store(&sync_root, &favicon_url).await {
+                let mut ids_to_update = vec![id];
+                if let Ok(store) =
+                    doc_handle.with_doc(autosurgeon::hydrate::<_, crate::model::BookmarkStore>)
+                {
+                    for (existing_id, bm) in &store.bookmarks {
+                        if bm.url == bookmark_url
+                            && !bm.deleted
+                            && !ids_to_update.contains(existing_id)
+                        {
+                            ids_to_update.push(existing_id.clone());
+                        }
+                    }
+                }
+                for bm_id in &ids_to_update {
+                    let _ = ops::update_favicon(&doc_handle, bm_id, &filename);
+                }
+                crate::repo::export_doc_to_shared(&doc_handle, &sync_root, &client_id);
+                let _ = sse_tx.send(());
+            }
+        });
+    }
+
     render_folder_response(&state, &form.folder_id, true, SortOrder::default())
 }
 
@@ -791,6 +829,7 @@ pub async fn update_bookmark_html(
         title: bm.title.clone(),
         url: bm.url.clone(),
         notes: bm.notes.clone(),
+        favicon: bm.favicon.clone(),
         created_at: bm.created_at.clone(),
         updated_at: bm.updated_at.clone(),
         created_date: date_short(&bm.created_at),
@@ -1064,6 +1103,7 @@ pub async fn search(
             notes: bm.notes.clone(),
             created_at: bm.created_at.clone(),
             created_date: date_short(&bm.created_at),
+            favicon: bm.favicon.clone(),
             domain_color: domain_color(&bm.url),
             domain_letter: domain_letter(&bm.url),
         })
@@ -1113,10 +1153,19 @@ pub async fn bookmark_history_html(
     html.push_str(r#"<div class="detail-icon-wrap">"#);
     let dc = domain_color(&bm.url);
     let dl = domain_letter(&bm.url);
-    let _ = write!(
-        html,
-        r#"<span class="favicon" style="background:{dc};width:28px;height:28px;font-size:16px">{dl}</span>"#,
-    );
+    if bm.favicon.is_empty() {
+        let _ = write!(
+            html,
+            r#"<span class="favicon favicon-lg" style="background:{dc}">{dl}</span>"#,
+        );
+    } else {
+        let _ = write!(
+            html,
+            r#"<img class="favicon favicon-lg" src="/favicons/{fav}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{{className:'favicon favicon-lg',textContent:'{dl}',style:'background:{dc}'}}))""#,
+            fav = html_escape(&bm.favicon),
+        );
+        html.push('>');
+    }
     html.push_str("</div>");
     let _ = write!(
         html,
@@ -1228,6 +1277,7 @@ pub async fn revert_bookmark_html(
         title: bm.title.clone(),
         url: bm.url.clone(),
         notes: bm.notes.clone(),
+        favicon: bm.favicon.clone(),
         created_at: bm.created_at.clone(),
         updated_at: bm.updated_at.clone(),
         created_date: date_short(&bm.created_at),
@@ -1324,6 +1374,44 @@ pub async fn sse_events(
         .filter_map(Result::ok)
         .map(|()| Ok(Event::default().event("refresh").data("sync")));
     Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+}
+
+/// # Errors
+/// Returns `404 Not Found` if the favicon file does not exist.
+pub async fn serve_favicon(
+    State(state): State<Arc<AppState>>,
+    Path(filename): Path<String>,
+) -> Result<Response, StatusCode> {
+    if !filename
+        .chars()
+        .all(|c| c.is_ascii_hexdigit() || c == '.' || c.is_ascii_alphabetic())
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let path = crate::favicon::favicon_path(&state.sync_root, &filename);
+    let data = tokio::fs::read(&path)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    let content_type = match path.extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png",
+        Some("ico") => "image/x-icon",
+        Some("svg") => "image/svg+xml",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        _ => "application/octet-stream",
+    };
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, content_type.to_string()),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "public, max-age=31536000, immutable".to_string(),
+            ),
+        ],
+        data,
+    )
+        .into_response())
 }
 
 #[cfg(test)]

@@ -71,7 +71,18 @@ function formatLocalDates() {
 
 function buildBookmarklet() {
   const origin = window.location.origin;
-  return "javascript:void(window.open('" + origin + "/?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'_blank'))";
+  const code = "(function(){" +
+    "var links=document.querySelectorAll('link[rel*=\"icon\"],link[rel=\"apple-touch-icon\"],link[rel=\"apple-touch-icon-precomposed\"]');" +
+    "var best='',bestSize=0;" +
+    "for(var i=0;i<links.length;i++){" +
+    "var l=links[i];" +
+    "if(!l.href||l.href.indexOf('data:')===0)continue;" +
+    "var s=parseInt(l.getAttribute('sizes'),10)||0;" +
+    "if(l.rel.indexOf('apple-touch-icon')!==-1&&s===0)s=180;" +
+    "if(s>bestSize||(best===''&&s===0)){best=l.href;bestSize=s}}" +
+    "if(!best)best=location.origin+'/favicon.ico';" +
+    "window.open('" + origin + "/?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)+'&favicon_url='+encodeURIComponent(best),'_blank')})()";
+  return "javascript:void(" + code + ")";
 }
 
 function initApp() {
@@ -99,6 +110,7 @@ function initApp() {
     searchExpanded: false,
     prefillTitle: '',
     prefillUrl: '',
+    prefillFaviconUrl: '',
     openRenameFolder: function(id, title) {
       this.renameFolderId = id;
       this.renameFolderTitle = title;
@@ -125,6 +137,7 @@ function initApp() {
   if (urlParams.has('url') || urlParams.has('title')) {
     Alpine.store('app').prefillTitle = urlParams.get('title') || '';
     Alpine.store('app').prefillUrl = urlParams.get('url') || '';
+    Alpine.store('app').prefillFaviconUrl = urlParams.get('favicon_url') || '';
     Alpine.store('app').showAddModal = true;
     history.replaceState(null, '', window.location.pathname);
   }
@@ -306,6 +319,7 @@ document.addEventListener('keydown', function(e) {
     e.preventDefault();
     Alpine.store('app').prefillTitle = '';
     Alpine.store('app').prefillUrl = '';
+    Alpine.store('app').prefillFaviconUrl = '';
     Alpine.store('app').showAddModal = true;
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') {

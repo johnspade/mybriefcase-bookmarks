@@ -112,6 +112,7 @@ fn build_router(state: Arc<api::AppState>) -> Router {
         .route("/folder-options", get(views::folder_options))
         .route("/import", post(views::import_bookmarks_html))
         .route("/export", get(api::export_bookmarks))
+        .route("/favicons/{filename}", get(views::serve_favicon))
         .nest_service("/static", ServeEmbed::<StaticAssets>::new())
         .with_state(state)
         .layer(CatchPanicLayer::new())
@@ -178,6 +179,7 @@ async fn main() {
         repo::init_repo(&cfg.local_data_dir, &cfg.sync_root, &client_id).await;
 
     repo::full_merge_pass(&doc_handle, &cfg.sync_root, &client_id);
+    repo::migrate_add_favicon_field(&doc_handle);
     repo::export_doc_to_shared(&doc_handle, &cfg.sync_root, &client_id);
     write_peer_info(&cfg.sync_root, &client_id);
 

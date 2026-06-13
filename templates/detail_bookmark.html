@@ -1,6 +1,7 @@
 <div class="detail-icon-wrap">
-  <span class="favicon favicon-lg" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span>
-</div>
+{% if favicon.is_empty() %}  <span class="favicon favicon-lg" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span>
+{% else %}  <img class="favicon favicon-lg" src="/favicons/{{ favicon }}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'favicon favicon-lg',textContent:'{{ domain_letter }}',style:'background:{{ domain_color }}'}))">
+{% endif %}</div>
 <div class="detail-title">{{ title }}</div>
 <a class="detail-url" href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
 <div class="detail-tab-bar">

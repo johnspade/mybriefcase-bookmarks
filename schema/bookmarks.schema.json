@@ -39,6 +39,7 @@
       "required": [
         "created_at",
         "deleted",
+        "favicon",
         "notes",
         "title",
         "updated_at",
@@ -53,6 +54,9 @@
         "deleted": {
           "description": "Soft-delete flag",
           "type": "boolean"
+        },
+        "favicon": {
+          "type": "string"
         },
         "notes": {
           "type": "string"
