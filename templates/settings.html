@@ -13,8 +13,9 @@
   <section class="settings-section">
     <h3>Import</h3>
     <p>Upload an HTML bookmarks file exported from any browser.</p>
-    <form hx-post="/import" hx-target="#folder-content" hx-swap="innerHTML"
+    <form hx-post="/import" hx-swap="none"
           hx-encoding="multipart/form-data"
+          @htmx:after-request.camel="if($event.detail.successful) window.location.href='/'"
           x-data x-init="htmx.process($el)">
       <div class="detail-field">
         <label for="import-target">Import to</label>
