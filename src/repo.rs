@@ -217,6 +217,7 @@ mod tests {
     use crate::model::BookmarkStore;
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_migration_adds_favicon_field() {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let store = FsStorage::open(temp_dir.path()).unwrap();
