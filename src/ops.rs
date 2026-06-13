@@ -30,6 +30,7 @@ pub fn add_bookmark(
         tx.put(&bm, "url", url)?;
         tx.put(&bm, "title", title)?;
         tx.put(&bm, "notes", "")?;
+        tx.put(&bm, "favicon", "")?;
         tx.put(&bm, "created_at", now.as_str())?;
         tx.put(&bm, "updated_at", now.as_str())?;
         tx.put(&bm, "deleted", false)?;
@@ -51,6 +52,32 @@ pub fn add_bookmark(
         Ok(())
     })?;
     Ok(id)
+}
+
+/// # Errors
+/// Returns an error if the document schema is invalid or the automerge transaction fails.
+pub fn update_favicon(
+    doc_handle: &DocHandle,
+    bookmark_id: &str,
+    favicon: &str,
+) -> anyhow::Result<()> {
+    let now = chrono::Utc::now().to_rfc3339();
+    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+        let mut tx = doc.transaction();
+        let bookmarks = tx
+            .get(automerge::ROOT, "bookmarks")?
+            .context("missing bookmarks map")?
+            .1;
+        let bm = tx
+            .get(&bookmarks, bookmark_id)?
+            .with_context(|| format!("bookmark not found: {bookmark_id}"))?
+            .1;
+        tx.put(&bm, "favicon", favicon)?;
+        tx.put(&bm, "updated_at", now.as_str())?;
+        tx.commit_with(commit_opts(format!("update_favicon:{bookmark_id}")));
+        Ok(())
+    })?;
+    Ok(())
 }
 
 /// # Errors
@@ -409,6 +436,7 @@ fn insert_items_recursive(
                 tx.put(&bm, "url", url.as_str())?;
                 tx.put(&bm, "title", title.as_str())?;
                 tx.put(&bm, "notes", notes.as_str())?;
+                tx.put(&bm, "favicon", "")?;
                 tx.put(
                     &bm,
                     "created_at",
@@ -536,11 +564,16 @@ pub fn revert_bookmark(
             .get_at(&bm_obj, "notes", target_heads)?
             .map(|(v, _)| v.into_string().unwrap_or_default())
             .unwrap_or_default();
+        let old_favicon = doc
+            .get_at(&bm_obj, "favicon", target_heads)?
+            .map(|(v, _)| v.into_string().unwrap_or_default())
+            .unwrap_or_default();
 
         let mut tx = doc.transaction();
         tx.put(&bm_obj, "url", old_url.as_str())?;
         tx.put(&bm_obj, "title", old_title.as_str())?;
         tx.put(&bm_obj, "notes", old_notes.as_str())?;
+        tx.put(&bm_obj, "favicon", old_favicon.as_str())?;
         tx.put(&bm_obj, "updated_at", now.as_str())?;
         let short_hash = &format!("{target_hash}")[..8];
         tx.commit_with(commit_opts(format!(
@@ -612,6 +645,7 @@ mod tests {
         let bm = store.bookmarks.get(&id).unwrap();
         assert_eq!(bm.url, "https://example.com");
         assert_eq!(bm.title, "Example");
+        assert_eq!(bm.favicon, "");
         assert!(!bm.deleted);
     }
 
@@ -736,5 +770,24 @@ mod tests {
         assert!(store.bookmarks.get(&bm_a).unwrap().deleted);
         assert!(!store.folders.get(&folder_b).unwrap().deleted);
         assert!(!store.bookmarks.get(&bm_b).unwrap().deleted);
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_update_favicon() {
+        let (doc, _tmp) = setup_repo();
+        let store = read_store(&doc);
+        let root_id = store.root_folder_id;
+        let id = add_bookmark(&doc, &root_id, "https://example.com", "Example").unwrap();
+        let store = read_store(&doc);
+        let original_updated = store.bookmarks.get(&id).unwrap().updated_at.clone();
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        update_favicon(&doc, &id, "abc123.png").unwrap();
+
+        let store = read_store(&doc);
+        let bm = store.bookmarks.get(&id).unwrap();
+        assert_eq!(bm.favicon, "abc123.png");
+        assert_ne!(bm.updated_at, original_updated);
     }
 }
