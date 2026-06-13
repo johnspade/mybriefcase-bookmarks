@@ -1151,16 +1151,14 @@ pub async fn bookmark_history_html(
     let mut html = String::new();
 
     html.push_str(r#"<div class="detail-icon-wrap">"#);
+    let dc = domain_color(&bm.url);
+    let dl = domain_letter(&bm.url);
     if bm.favicon.is_empty() {
-        let dc = domain_color(&bm.url);
-        let dl = domain_letter(&bm.url);
         let _ = write!(
             html,
             r#"<span class="favicon favicon-lg" style="background:{dc}">{dl}</span>"#,
         );
     } else {
-        let dc = domain_color(&bm.url);
-        let dl = domain_letter(&bm.url);
         let _ = write!(
             html,
             r#"<img class="favicon favicon-lg" src="/favicons/{fav}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{{className:'favicon favicon-lg',textContent:'{dl}',style:'background:{dc}'}}))""#,
