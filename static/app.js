@@ -71,7 +71,18 @@ function formatLocalDates() {
 
 function buildBookmarklet() {
   const origin = window.location.origin;
-  return "javascript:void((function(){var i=document.querySelector('link[rel~=\"icon\"]');var f=(i&&i.href&&i.href.indexOf('data:')!==0)?i.href:'';window.open('" + origin + "/?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)+'&favicon_url='+encodeURIComponent(f),'_blank')})())";
+  const code = "(function(){" +
+    "var links=document.querySelectorAll('link[rel*=\"icon\"],link[rel=\"apple-touch-icon\"],link[rel=\"apple-touch-icon-precomposed\"]');" +
+    "var best='',bestSize=0;" +
+    "for(var i=0;i<links.length;i++){" +
+    "var l=links[i];" +
+    "if(!l.href||l.href.indexOf('data:')===0)continue;" +
+    "var s=parseInt(l.getAttribute('sizes'),10)||0;" +
+    "if(l.rel.indexOf('apple-touch-icon')!==-1&&s===0)s=180;" +
+    "if(s>bestSize||(best===''&&s===0)){best=l.href;bestSize=s}}" +
+    "if(!best)best=location.origin+'/favicon.ico';" +
+    "window.open('" + origin + "/?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)+'&favicon_url='+encodeURIComponent(best),'_blank')})()";
+  return "javascript:void(" + code + ")";
 }
 
 function initApp() {
