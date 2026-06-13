@@ -61,6 +61,45 @@ test.describe('Folders', () => {
     await expect(page.locator('.list-item', { hasText: 'To Delete' })).not.toBeVisible();
   });
 
+  test('rename a folder via three-dot menu', async ({ serverPage: page }) => {
+    await page.goto('/');
+
+    // Create folder
+    await page.locator('.fab-btn').click();
+    await page.locator('.fab-menu-item', { hasText: 'New Folder' }).click();
+    const modal = page.locator('.modal-overlay').first();
+    await expect(modal.locator('input[name="title"]')).toBeFocused();
+    await modal.locator('input[name="title"]').fill('Before Rename');
+    await modal.locator('button[type="submit"]').click();
+    await expect(modal).not.toBeVisible();
+    await expect(page.locator('.list-item .item-name', { hasText: 'Before Rename' })).toBeVisible();
+
+    // Open three-dot menu and click Rename
+    const folderItem = page.locator('.list-item', { hasText: 'Before Rename' });
+    await folderItem.hover();
+    await folderItem.locator('.item-menu-trigger').click();
+    await folderItem.locator('.item-menu-option', { hasText: 'Rename' }).click();
+
+    // Rename modal should appear with pre-filled name
+    const renameModal = page.locator('.modal-overlay').first();
+    await expect(renameModal).toBeVisible();
+    const nameInput = renameModal.locator('input[name="title"]');
+    await expect(nameInput).toHaveValue('Before Rename');
+
+    // Clear and type new name
+    await nameInput.clear();
+    await nameInput.fill('After Rename');
+    await renameModal.locator('button[type="submit"]').click();
+
+    // Modal should close and new name should appear
+    await expect(renameModal).not.toBeVisible();
+    await expect(page.locator('.list-item .item-name', { hasText: 'After Rename' })).toBeVisible();
+    await expect(page.locator('.list-item .item-name', { hasText: 'Before Rename' })).not.toBeVisible();
+
+    // Sidebar should also reflect the rename
+    await expect(page.locator('#sidebar-tree')).toContainText('After Rename');
+  });
+
   test('delete a folder with bookmarks inside', async ({ serverPage: page }) => {
     await page.goto('/');
 
