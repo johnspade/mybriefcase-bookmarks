@@ -76,7 +76,6 @@ fn build_router(state: Arc<api::AppState>) -> Router {
         )
         .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
-        .route("/folders/{id}/detail", get(views::folder_detail_view))
         .route("/folders/new", post(views::create_folder_html))
         .route("/bookmarks/new", post(views::create_bookmark_html))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
