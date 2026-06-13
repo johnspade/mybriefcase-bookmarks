@@ -67,6 +67,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn store_favicon_writes_and_returns_filename() {
         let tmp = TempDir::new().unwrap();
         let data = b"fake png data";
@@ -83,6 +84,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn store_favicon_is_idempotent() {
         let tmp = TempDir::new().unwrap();
         let data = b"same data";
@@ -92,6 +94,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn store_favicon_rejects_oversized() {
         let tmp = TempDir::new().unwrap();
         let data = vec![0u8; MAX_FAVICON_SIZE + 1];
@@ -100,6 +103,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn store_favicon_rejects_empty() {
         let tmp = TempDir::new().unwrap();
         let result = store_favicon(tmp.path(), b"", "image/png");
