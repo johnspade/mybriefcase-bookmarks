@@ -40,7 +40,18 @@ Never kill processes by port (e.g. `lsof -ti :PORT | xargs kill`). The user's Fi
 
 PR descriptions must follow the template in `.github/pull_request_template.md`.
 
-When a PR touches the frontend (HTML, CSS, JS, templates), attach before and after screenshots for both desktop and mobile viewports. Use the Firefox devtools MCP (if available) for manual testing, debugging, and taking screenshots.
+When a PR touches the frontend (HTML, CSS, JS, templates), attach before and after screenshots for both desktop and mobile viewports. Use the Chrome DevTools MCP (preferred) or Firefox DevTools MCP for manual testing, debugging, and taking screenshots.
+
+## Mobile Viewport Screenshots
+
+Use `chrome-devtools-mcp` for viewport screenshots. Its `emulate` tool uses Chrome's device metrics override (not window resizing), so it can emulate any viewport including phone sizes.
+
+Viewport dimensions:
+
+- **Mobile:** `emulate` with viewport `"375x812x2,mobile,touch"`, then `navigate_page`, then `take_screenshot`
+- **Desktop:** `emulate` with viewport `"1280x800x1"`, then `navigate_page`, then `take_screenshot`
+
+Do not use Firefox DevTools MCP for viewport screenshots — its `set_viewport_size` resizes the OS window, which macOS clamps to ~500 CSS px (cannot reach the ≤480px phone breakpoint).
 
 ## Project Context
 
