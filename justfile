@@ -30,5 +30,8 @@ lint-frontend:
     npx html-validate "templates/**/*.html"
     npx eslint "static/**/*.js" --no-error-on-unmatched-pattern
 
+generate-schema:
+    cargo run --bin generate_schema > schema/bookmarks.schema.json
+
 build:
     cargo build --release

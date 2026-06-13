@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BookmarkStore",
+  "description": "Top-level document stored as an Automerge CRDT binary. Open with any Automerge library; the root object is a Map with this shape.",
+  "type": "object",
+  "required": [
+    "bookmarks",
+    "folders",
+    "meta",
+    "root_folder_id"
+  ],
+  "properties": {
+    "bookmarks": {
+      "description": "Map from bookmark UUID to bookmark object (Automerge Map — per-key conflict resolution)",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Bookmark"
+      }
+    },
+    "folders": {
+      "description": "Map from folder UUID to folder object (Automerge Map — per-key conflict resolution)",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Folder"
+      }
+    },
+    "meta": {
+      "$ref": "#/definitions/StoreMeta"
+    },
+    "root_folder_id": {
+      "description": "UUID identifying the root folder (key into `folders` map)",
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "definitions": {
+    "Bookmark": {
+      "type": "object",
+      "required": [
+        "created_at",
+        "deleted",
+        "notes",
+        "title",
+        "updated_at",
+        "url"
+      ],
+      "properties": {
+        "created_at": {
+          "description": "RFC 3339 timestamp",
+          "type": "string",
+          "format": "date-time"
+        },
+        "deleted": {
+          "description": "Soft-delete flag",
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "description": "RFC 3339 timestamp",
+          "type": "string",
+          "format": "date-time"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "Folder": {
+      "type": "object",
+      "required": [
+        "children",
+        "created_at",
+        "deleted",
+        "title",
+        "updated_at"
+      ],
+      "properties": {
+        "children": {
+          "description": "Ordered list of child IDs referencing keys in `folders` or `bookmarks` (Automerge List — concurrent inserts interleave rather than conflict)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "created_at": {
+          "description": "RFC 3339 timestamp",
+          "type": "string",
+          "format": "date-time"
+        },
+        "deleted": {
+          "description": "Soft-delete flag",
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "description": "RFC 3339 timestamp",
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "StoreMeta": {
+      "type": "object",
+      "required": [
+        "collection_name",
+        "schema_version"
+      ],
+      "properties": {
+        "collection_name": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}
