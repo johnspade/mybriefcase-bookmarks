@@ -33,7 +33,11 @@ fn build_views_app() -> (Router, String) {
         .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
-        .route("/bookmarks/new", post(views::create_bookmark_html))
+        .route(
+            "/bookmarks/new",
+            get(views::get_new_bookmark_page).post(views::create_bookmark_html),
+        )
+        .route("/settings", get(views::settings_page))
         .route("/items/move", post(views::move_item_html))
         .route("/move-picker/{id}", get(views::move_picker_html))
         .with_state(state);
@@ -60,7 +64,11 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
         .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
-        .route("/bookmarks/new", post(views::create_bookmark_html))
+        .route(
+            "/bookmarks/new",
+            get(views::get_new_bookmark_page).post(views::create_bookmark_html),
+        )
+        .route("/settings", get(views::settings_page))
         .route("/items/move", post(views::move_item_html))
         .route("/move-picker/{id}", get(views::move_picker_html))
         .with_state(state);
@@ -101,6 +109,7 @@ async fn create_bookmark(app: &Router, root_id: &str) -> String {
         .oneshot(
             Request::post("/bookmarks/new")
                 .header("content-type", "application/x-www-form-urlencoded")
+                .header("hx-request", "true")
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -259,6 +268,7 @@ async fn create_bookmark_with_title(app: &Router, root_id: &str, title: &str) ->
         .oneshot(
             Request::post("/bookmarks/new")
                 .header("content-type", "application/x-www-form-urlencoded")
+                .header("hx-request", "true")
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -486,4 +496,98 @@ async fn move_picker_shows_current_parent() {
     let (status, html) = get_html(app, &format!("/move-picker/{bm_id}")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("(current)"));
+}
+
+// ─── Settings & bookmarklet page tests ────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn settings_page_renders() {
+    let (app, _root_id) = build_views_app();
+
+    let (status, html) = get_html(app, "/settings").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains("Bookmarklet"),
+        "should have bookmarklet section"
+    );
+    assert!(html.contains("Import"), "should have import section");
+    assert!(html.contains("Export"), "should have export section");
+    assert!(
+        html.contains("buildBookmarklet"),
+        "should reference bookmarklet JS"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn get_new_bookmark_page_renders_empty() {
+    let (app, _root_id) = build_views_app();
+
+    let (status, html) = get_html(app, "/bookmarks/new").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("<form"), "should contain a form");
+    assert!(html.contains("name=\"title\""), "should have title input");
+    assert!(html.contains("name=\"url\""), "should have url input");
+    assert!(
+        html.contains("name=\"folder_id\""),
+        "should have folder select"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn get_new_bookmark_page_prefills_from_query() {
+    let (app, _root_id) = build_views_app();
+
+    let (status, html) = get_html(
+        app,
+        "/bookmarks/new?url=https%3A%2F%2Fexample.com&title=My+Page",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("https://example.com"), "should pre-fill url");
+    assert!(html.contains("My Page"), "should pre-fill title");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn create_bookmark_without_htmx_redirects() {
+    let (app, root_id) = build_views_app();
+
+    let body = format!("folder_id={root_id}&url=https%3A%2F%2Fexample.com&title=Test");
+    let resp = app
+        .oneshot(
+            Request::post("/bookmarks/new")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    let location = resp.headers().get("location").unwrap().to_str().unwrap();
+    assert!(location.contains(&root_id), "should redirect to the folder");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn create_bookmark_with_htmx_returns_html() {
+    let (app, root_id) = build_views_app();
+
+    let body = format!("folder_id={root_id}&url=https%3A%2F%2Fexample.com&title=Test");
+    let resp = app
+        .oneshot(
+            Request::post("/bookmarks/new")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("hx-request", "true")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8_lossy(&bytes).to_string();
+    assert!(html.contains("Test"), "should return folder content HTML");
 }

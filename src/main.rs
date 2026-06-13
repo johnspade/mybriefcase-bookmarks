@@ -78,7 +78,10 @@ fn build_router(state: Arc<api::AppState>) -> Router {
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
         .route("/folders/{id}/detail", get(views::folder_detail_view))
         .route("/folders/new", post(views::create_folder_html))
-        .route("/bookmarks/new", post(views::create_bookmark_html))
+        .route(
+            "/bookmarks/new",
+            get(views::get_new_bookmark_page).post(views::create_bookmark_html),
+        )
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
         .route("/bookmarks/{id}/history", get(views::bookmark_history_html))
         .route("/bookmarks/{id}/revert", post(views::revert_bookmark_html))
@@ -109,6 +112,7 @@ fn build_router(state: Arc<api::AppState>) -> Router {
         )
         .route("/api/bookmarks/{id}/revert", post(api::revert_bookmark))
         .route("/api/move", post(api::move_item))
+        .route("/settings", get(views::settings_page))
         .route("/import", post(views::import_bookmarks_html))
         .route("/export", get(api::export_bookmarks))
         .nest_service("/static", ServeEmbed::<StaticAssets>::new())

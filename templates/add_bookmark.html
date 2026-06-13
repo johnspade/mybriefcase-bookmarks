@@ -1,0 +1,31 @@
+<div class="add-bookmark-page">
+  <h2>Add Bookmark</h2>
+  <form method="post" action="/bookmarks/new"
+        hx-post="/bookmarks/new" hx-target="#folder-content" hx-swap="innerHTML"
+        x-data x-init="htmx.process($el); $nextTick(() => $refs.titleInput.focus())">
+    <div class="detail-field">
+      <label for="add-bm-title">Name</label>
+      <input type="text" id="add-bm-title" name="title" value="{{ prefill_title }}" placeholder="Bookmark name" required x-ref="titleInput">
+    </div>
+    <div class="detail-field">
+      <label for="add-bm-url">URL</label>
+      <input type="text" id="add-bm-url" name="url" value="{{ prefill_url }}" placeholder="https://example.com" required>
+    </div>
+    <div class="detail-field">
+      <label for="add-bm-folder">Folder</label>
+      <select id="add-bm-folder" name="folder_id">
+        {% for folder in folders %}
+        {% if folder.2 %}
+        <option value="{{ folder.0 }}" selected>{{ folder.1 }}</option>
+        {% else %}
+        <option value="{{ folder.0 }}">{{ folder.1 }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <a href="/" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary">Add Bookmark</button>
+    </div>
+  </form>
+</div>

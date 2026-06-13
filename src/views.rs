@@ -112,6 +112,12 @@ pub struct MoveItemForm {
 }
 
 #[derive(Deserialize)]
+pub struct NewBookmarkParams {
+    url: Option<String>,
+    title: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub struct SearchParams {
     q: String,
     sort: Option<String>,
@@ -185,6 +191,18 @@ struct EditBookmarkTemplate {
 #[derive(Template)]
 #[template(path = "detail_empty.html")]
 struct DetailEmptyTemplate;
+
+#[derive(Template)]
+#[template(path = "add_bookmark.html")]
+struct AddBookmarkTemplate {
+    prefill_title: String,
+    prefill_url: String,
+    folders: Vec<(String, String, bool)>,
+}
+
+#[derive(Template)]
+#[template(path = "settings.html")]
+struct SettingsTemplate;
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -551,6 +569,56 @@ pub async fn index_page(
 
 /// # Errors
 /// Returns `500 Internal Server Error` if template rendering fails.
+pub async fn get_new_bookmark_page(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<NewBookmarkParams>,
+) -> Result<Html<String>, StatusCode> {
+    let store = read_store(&state.doc_handle)?;
+    let root_id = store.root_folder_id.clone();
+
+    let mut folders = Vec::new();
+    let exclude = std::collections::HashSet::new();
+    collect_folder_paths(&store, &root_id, "", &exclude, &root_id, &mut folders);
+
+    let content_html = render(&AddBookmarkTemplate {
+        prefill_title: params.title.unwrap_or_default(),
+        prefill_url: params.url.unwrap_or_default(),
+        folders,
+    })?;
+
+    let sidebar_html = build_sidebar_html(&store, &root_id);
+    let page = BaseTemplate {
+        sidebar_html,
+        content_html,
+        current_folder_id: root_id,
+        page_title: "Add Bookmark — MyBriefcase Bookmarks".to_string(),
+        static_v: state.static_version.clone(),
+    };
+
+    Ok(Html(render(&page)?))
+}
+
+/// # Errors
+/// Returns `500 Internal Server Error` if template rendering fails.
+pub async fn settings_page(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
+    let store = read_store(&state.doc_handle)?;
+    let root_id = store.root_folder_id.clone();
+    let sidebar_html = build_sidebar_html(&store, &root_id);
+    let content_html = render(&SettingsTemplate)?;
+
+    let page = BaseTemplate {
+        sidebar_html,
+        content_html,
+        current_folder_id: root_id,
+        page_title: "Settings — MyBriefcase Bookmarks".to_string(),
+        static_v: state.static_version.clone(),
+    };
+
+    Ok(Html(render(&page)?))
+}
+
+/// # Errors
+/// Returns `500 Internal Server Error` if template rendering fails.
 pub async fn index_page_for_folder(
     State(state): State<Arc<AppState>>,
     folder_id: &str,
@@ -730,12 +798,19 @@ pub async fn create_folder_html(
 /// Returns `500 Internal Server Error` if template rendering fails.
 pub async fn create_bookmark_html(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Form(form): Form<CreateBookmarkForm>,
-) -> Result<Html<String>, StatusCode> {
+) -> Result<Response, StatusCode> {
     ops::add_bookmark(&state.doc_handle, &form.folder_id, &form.url, &form.title)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     after_write(&state);
-    render_folder_response(&state, &form.folder_id, true, SortOrder::default())
+
+    if headers.contains_key("hx-request") {
+        render_folder_response(&state, &form.folder_id, true, SortOrder::default())
+            .map(IntoResponse::into_response)
+    } else {
+        Ok(axum::response::Redirect::to(&format!("/folders/{}", form.folder_id)).into_response())
+    }
 }
 
 /// # Errors

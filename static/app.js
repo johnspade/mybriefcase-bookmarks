@@ -1,4 +1,4 @@
-/* exported getCurrentFolderId, toggleChevron, toggleTheme, trapFocus, openNewFolderPrompt, initApp, formatLocalDates */
+/* exported getCurrentFolderId, toggleChevron, toggleTheme, trapFocus, openNewFolderPrompt, initApp, formatLocalDates, buildBookmarklet */
 
 function getCurrentFolderId() {
   const el = document.getElementById('current-folder-id');
@@ -69,6 +69,11 @@ function formatLocalDates() {
   });
 }
 
+function buildBookmarklet() {
+  const origin = window.location.origin;
+  return "javascript:void(window.open('" + origin + "/bookmarks/new?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'_blank'))";
+}
+
 function initApp() {
   const savedPref = localStorage.getItem('theme-preference') || 'system';
   const effectiveTheme = (savedPref === 'system') ? getSystemTheme() : savedPref;
@@ -84,7 +89,6 @@ function initApp() {
     sortOrder: savedSortOrder,
     showAddModal: false,
     showFolderModal: false,
-    showImportModal: false,
     showEditModal: false,
     showMoveModal: false,
     sidebarOpen: false,
@@ -274,7 +278,6 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     Alpine.store('app').showAddModal = false;
     Alpine.store('app').showFolderModal = false;
-    Alpine.store('app').showImportModal = false;
     Alpine.store('app').showEditModal = false;
     Alpine.store('app').showMoveModal = false;
   }
