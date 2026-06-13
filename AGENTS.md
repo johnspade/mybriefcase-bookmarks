@@ -44,39 +44,14 @@ When a PR touches the frontend (HTML, CSS, JS, templates), attach before and aft
 
 ## Mobile Viewport Screenshots
 
-Use `chrome-devtools-mcp` for viewport screenshots. Its `emulate` tool uses Chrome's device metrics override (not window resizing), so it can emulate any viewport including phone sizes below 500px.
+Use `chrome-devtools-mcp` for viewport screenshots. Its `emulate` tool uses Chrome's device metrics override (not window resizing), so it can emulate any viewport including phone sizes.
 
-**Setup** (once per machine):
+Viewport dimensions:
 
-```
-claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest --headless
-```
+- **Mobile:** `emulate` with viewport `"375x812x2,mobile,touch"`, then `navigate_page`, then `take_screenshot`
+- **Desktop:** `emulate` with viewport `"1280x800x1"`, then `navigate_page`, then `take_screenshot`
 
-**Procedure for mobile screenshots:**
-
-1. `emulate` — viewport: `"375x812x2,mobile,touch"`
-2. `navigate_page` — load the target URL
-3. `take_screenshot`
-
-**Procedure for desktop screenshots:**
-
-1. `emulate` — viewport: `"1280x800x1"`
-2. `navigate_page` — load the target URL
-3. `take_screenshot`
-
-**How to distinguish mobile from desktop:**
-
-| Indicator | Desktop (> 768px) | Mobile (≤ 480px) |
-|---|---|---|
-| Sidebar | Always visible | Hidden (drawer) |
-| Detail panel | Always visible | Hidden (drawer) |
-| Hamburger menu (≡) | Hidden | Visible |
-| Back/Forward buttons | Visible | Hidden |
-| Search bar | Full text input | Collapsed to icon |
-| Statusbar | Visible | Hidden |
-| Touch targets | 28px buttons | 44px buttons |
-
-**Why not Firefox DevTools MCP?** Firefox's `set_viewport_size` resizes the OS window, which is clamped to ~500 CSS px on macOS. This triggers the ≤768px breakpoint (hamburger menu, drawer panels) but cannot reach the ≤480px breakpoint (hidden back/forward, collapsed search). Chrome's `emulate` uses CDP device metrics override which has no such limitation.
+Do not use Firefox DevTools MCP for viewport screenshots — its `set_viewport_size` resizes the OS window, which macOS clamps to ~500 CSS px (cannot reach the ≤480px phone breakpoint).
 
 ## Project Context
 
