@@ -164,15 +164,6 @@ struct DetailBookmarkTemplate {
 }
 
 #[derive(Template)]
-#[template(path = "detail_folder.html")]
-struct DetailFolderTemplate {
-    id: String,
-    title: String,
-    item_count: usize,
-    bookmark_count: usize,
-}
-
-#[derive(Template)]
 #[template(path = "edit_bookmark.html")]
 struct EditBookmarkTemplate {
     id: String,
@@ -719,37 +710,6 @@ pub async fn bookmark_edit_form(
         url: bm.url.clone(),
         notes: bm.notes.clone(),
         folders,
-    };
-
-    Ok(Html(render(&template)?).into_response())
-}
-
-/// # Errors
-/// Returns `500 Internal Server Error` if template rendering fails.
-pub async fn folder_detail_view(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-) -> Result<Response, StatusCode> {
-    let store = read_store(&state.doc_handle)?;
-    let folder = match store.folders.get(&id) {
-        Some(f) if !f.deleted => f,
-        _ => return Ok(Html(render(&DetailEmptyTemplate)?).into_response()),
-    };
-
-    let item_count = folder
-        .children
-        .iter()
-        .filter(|cid| {
-            store.folders.get(*cid).is_some_and(|f| !f.deleted)
-                || store.bookmarks.get(*cid).is_some_and(|b| !b.deleted)
-        })
-        .count();
-
-    let template = DetailFolderTemplate {
-        id: id.clone(),
-        title: folder.title.clone(),
-        item_count,
-        bookmark_count: count_bookmarks_recursive(&store, folder),
     };
 
     Ok(Html(render(&template)?).into_response())

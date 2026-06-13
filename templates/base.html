@@ -146,6 +146,27 @@
   </div>
 </template>
 
+<!-- Rename Folder Modal -->
+<template x-if="$store.app.showRenameModal">
+  <div class="modal-overlay" @click.self="$store.app.showRenameModal = false" @keydown.escape.window="$store.app.showRenameModal = false">
+    <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="rename-folder-title" @keydown.tab="trapFocus($event)">
+      <h2 id="rename-folder-title">Rename Folder</h2>
+      <form :hx-post="'/folders/' + $store.app.renameFolderId + '/rename'" hx-target="#folder-content" hx-swap="innerHTML"
+            x-init="htmx.process($el)">
+        <input type="hidden" name="current_folder_id" :value="getCurrentFolderId()">
+        <div class="detail-field">
+          <label>Folder name</label>
+          <input type="text" name="title" :value="$store.app.renameFolderTitle" required x-init="$nextTick(() => { $el.focus(); $el.select(); })">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="$store.app.showRenameModal = false">Cancel</button>
+          <button type="submit" class="btn btn-primary">Rename</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</template>
+
 <!-- Move Item Modal -->
 <div class="modal-overlay" x-show="$store.app.showMoveModal" x-cloak
      @click.self="$store.app.showMoveModal = false" @keydown.escape.window="$store.app.showMoveModal && ($store.app.showMoveModal = false)">
