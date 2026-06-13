@@ -545,14 +545,8 @@ async fn folder_options_returns_option_elements() {
 
     let (status, html) = get_html(app, "/folder-options").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        html.contains("<option"),
-        "should return option elements"
-    );
-    assert!(
-        html.contains(&root_id),
-        "should contain the root folder id"
-    );
+    assert!(html.contains("<option"), "should return option elements");
+    assert!(html.contains(&root_id), "should contain the root folder id");
     assert!(
         html.contains("Bookmarks"),
         "should contain the root folder name"
@@ -568,10 +562,7 @@ async fn folder_options_includes_subfolders() {
 
     let (status, html) = get_html(app, "/folder-options").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        html.contains("Sub Folder"),
-        "should list the subfolder"
-    );
+    assert!(html.contains("Sub Folder"), "should list the subfolder");
 }
 
 // ─── Import endpoint tests ────────────────────────────
@@ -582,10 +573,7 @@ fn multipart_body(target: &str, file_content: &str) -> (String, Vec<u8>) {
     body.extend_from_slice(format!("------TestBoundary123\r\nContent-Disposition: form-data; name=\"target\"\r\n\r\n{target}\r\n").as_bytes());
     body.extend_from_slice(format!("------TestBoundary123\r\nContent-Disposition: form-data; name=\"file\"; filename=\"bookmarks.html\"\r\nContent-Type: text/html\r\n\r\n{file_content}\r\n").as_bytes());
     body.extend_from_slice(b"------TestBoundary123--\r\n");
-    (
-        format!("multipart/form-data; boundary={boundary}"),
-        body,
-    )
+    (format!("multipart/form-data; boundary={boundary}"), body)
 }
 
 #[tokio::test]
@@ -613,7 +601,10 @@ async fn import_to_root_creates_bookmarks() {
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let html = String::from_utf8_lossy(&bytes).to_string();
     assert!(html.contains("Example"), "should contain imported bookmark");
-    assert!(html.contains("Rust"), "should contain second imported bookmark");
+    assert!(
+        html.contains("Rust"),
+        "should contain second imported bookmark"
+    );
 }
 
 #[tokio::test]
@@ -640,7 +631,10 @@ async fn import_to_new_folder_creates_subfolder() {
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let html = String::from_utf8_lossy(&bytes).to_string();
     assert!(html.contains("Example"), "should contain imported bookmark");
-    assert!(html.contains("Imported"), "should show imported folder context");
+    assert!(
+        html.contains("Imported"),
+        "should show imported folder context"
+    );
 }
 
 #[tokio::test]
