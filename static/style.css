@@ -442,6 +442,7 @@ body {
   display: flex; align-items: center; justify-content: center;
   font-size: var(--text-2xs); font-weight: 700; color: #fff; flex-shrink: 0;
 }
+img.favicon { object-fit: contain; display: block; }
 .favicon-lg { width: 28px; height: 28px; font-size: var(--text-sm); }
 .favicon-xl { width: 36px; height: 36px; font-size: var(--text-lg); }
 
