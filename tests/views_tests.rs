@@ -30,6 +30,7 @@ fn build_views_app() -> (Router, String) {
     });
     let app = Router::new()
         .route("/folders/{id}/content", get(views::folder_content))
+        .route("/folders/{id}/rename", post(views::rename_folder_html))
         .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
@@ -57,6 +58,7 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
     });
     let app = Router::new()
         .route("/folders/{id}/content", get(views::folder_content))
+        .route("/folders/{id}/rename", post(views::rename_folder_html))
         .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
         .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
@@ -486,4 +488,18 @@ async fn move_picker_shows_current_parent() {
     let (status, html) = get_html(app, &format!("/move-picker/{bm_id}")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("(current)"));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn rename_folder_updates_title() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_id = ops::create_folder(&doc, &root_id, "Original Name").unwrap();
+
+    let form_body = format!("title=Renamed+Folder&current_folder_id={root_id}");
+    let (status, html) = post_form(app, &format!("/folders/{folder_id}/rename"), &form_body).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("Renamed Folder"));
+    assert!(!html.contains("Original Name"));
 }

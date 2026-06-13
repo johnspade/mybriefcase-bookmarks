@@ -87,9 +87,17 @@ function initApp() {
     showImportModal: false,
     showEditModal: false,
     showMoveModal: false,
+    showRenameModal: false,
+    renameFolderId: '',
+    renameFolderTitle: '',
     sidebarOpen: false,
     detailOpen: false,
     searchExpanded: false,
+    openRenameFolder: function(id, title) {
+      this.renameFolderId = id;
+      this.renameFolderTitle = title;
+      this.showRenameModal = true;
+    },
     openMovePicker: function(itemId) {
       htmx.ajax('GET', '/move-picker/' + itemId, {target: '#move-picker-body', swap: 'innerHTML'}).then(function() {
         Alpine.store('app').showMoveModal = true;
@@ -166,6 +174,8 @@ function initApp() {
       Alpine.store('app').showFolderModal = false;
     } else if (path === '/import') {
       Alpine.store('app').showImportModal = false;
+    } else if (path.match(/\/folders\/[^/]+\/rename/)) {
+      Alpine.store('app').showRenameModal = false;
     }
   });
 
@@ -277,6 +287,7 @@ document.addEventListener('keydown', function(e) {
     Alpine.store('app').showImportModal = false;
     Alpine.store('app').showEditModal = false;
     Alpine.store('app').showMoveModal = false;
+    Alpine.store('app').showRenameModal = false;
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
     e.preventDefault();
