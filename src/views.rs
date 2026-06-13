@@ -352,10 +352,10 @@ fn build_sidebar_folder(
         let open_cls = if is_open { " open" } else { "" };
         let _ = write!(
             html,
-            r#"<span class="chevron{open_cls}" onclick="event.stopPropagation();toggleChevron(this)"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></span>"#,
+            r#"<span class="chevron{open_cls}" onclick="event.stopPropagation();toggleChevron(this)"><svg width="10" height="10" viewBox="7 4 10 16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></span>"#,
         );
     } else {
-        html.push_str(r#"<span style="width:10px;flex-shrink:0"></span>"#);
+        html.push_str(r#"<span style="width:14px;flex-shrink:0"></span>"#);
     }
 
     html.push_str(r#"<span class="item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--folder-color)" stroke="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>"#);

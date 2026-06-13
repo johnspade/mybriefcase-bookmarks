@@ -124,7 +124,7 @@ body {
 .tree-item.selected { background: var(--selected-bg); color: var(--selected-text); }
 .tree-item.selected svg { color: var(--selected-text) !important; }
 .tree-item .chevron {
-  width: 10px; height: 14px; flex-shrink: 0;
+  width: 14px; height: 14px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   color: var(--text-faint); transition: transform 0.15s ease;
 }
@@ -546,7 +546,7 @@ body.drawer-open { overflow: hidden; }
   .detail-panel.open { transform: translateX(0); }
 
   .tree-item { min-height: 44px; padding: var(--space-2) var(--space-3); }
-  .tree-item .chevron { width: 44px; height: 44px; margin: calc(-1 * var(--space-2)) 0; }
+  .tree-item .chevron { width: 24px; height: 44px; margin: calc(-1 * var(--space-2)) 0; }
 
   .list-item { min-height: 44px; padding: var(--space-2) var(--space-3); }
 
