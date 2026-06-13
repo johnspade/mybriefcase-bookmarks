@@ -33,7 +33,8 @@
             filter = path: type:
               (craneLib.filterCargoSources path type) ||
               (builtins.match ".*templates/.*" path != null) ||
-              (builtins.match ".*static/.*" path != null);
+              (builtins.match ".*static/.*" path != null) ||
+              (builtins.match ".*schema/.*" path != null);
           };
           commonArgs = {
             inherit src;
