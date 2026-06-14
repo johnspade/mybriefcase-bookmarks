@@ -1,3 +1,5 @@
+#![cfg(feature = "slow-tests")]
+
 use std::net::TcpListener;
 use std::time::Duration;
 use tokio::process::{Child, Command};

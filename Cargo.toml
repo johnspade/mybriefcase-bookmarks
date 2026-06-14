@@ -45,6 +45,9 @@ hex = "0.4"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 infer = "0.19.0"
 
+[features]
+slow-tests = []
+
 [lints.rust]
 unsafe_code = "forbid"
 unused_imports = "deny"

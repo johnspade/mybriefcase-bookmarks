@@ -4,7 +4,10 @@ use mybriefcase_bookmarks::ops;
 use proptest::prelude::*;
 
 use crate::common::{fork_doc, merge_docs, new_initialized_doc};
-use crate::invariants::{assert_cascade_complete, assert_stores_converged, assert_valid_tree};
+use crate::invariants::{
+    assert_cascade_complete, assert_stores_converged, assert_structural_integrity,
+    assert_valid_tree,
+};
 use crate::strategies::{DocState, arb_op, arb_op_sequence};
 
 fn hydrate_store(doc: &automerge_repo::DocHandle) -> BookmarkStore {
@@ -29,6 +32,7 @@ proptest! {
 
         let store = hydrate_store(&doc.doc_handle);
         assert_valid_tree(&store);
+        assert_structural_integrity(&store);
     }
 
     #[test]
@@ -55,6 +59,7 @@ proptest! {
 
             let store = hydrate_store(&doc.doc_handle);
             assert_cascade_complete(&store, &target_id);
+            assert_structural_integrity(&store);
         }
     }
 
