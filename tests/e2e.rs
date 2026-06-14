@@ -275,17 +275,13 @@ async fn live_bidirectional_sync() {
             let has_syncthing = tree["bookmarks"]
                 .as_array()
                 .is_some_and(|arr| arr.iter().any(|b| b["title"] == "Syncthing"));
-            let move_applied = tree["folders"]
-                .as_array()
-                .is_some_and(|arr| {
-                    arr.iter()
-                        .filter(|f| f["title"] == "Work")
-                        .any(|f| {
-                            f["children"]
-                                .as_array()
-                                .is_some_and(|c| c.iter().any(|id| id == &*expected_bm2_id))
-                        })
-                });
+            let move_applied = tree["folders"].as_array().is_some_and(|arr| {
+                arr.iter().filter(|f| f["title"] == "Work").any(|f| {
+                    f["children"]
+                        .as_array()
+                        .is_some_and(|c| c.iter().any(|id| id == &*expected_bm2_id))
+                })
+            });
             has_syncthing && move_applied
         },
     )
