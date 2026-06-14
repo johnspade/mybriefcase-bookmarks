@@ -158,6 +158,27 @@ impl TestClient {
         .await
         .unwrap_or_else(|_| panic!("Timed out waiting for: {description}"));
     }
+
+    async fn poll_until(
+        &self,
+        description: &str,
+        base: &str,
+        predicate: impl Fn(&serde_json::Value) -> bool + Send + Sync,
+    ) {
+        let deadline = Duration::from_secs(10);
+
+        timeout(deadline, async {
+            loop {
+                let tree = self.get_tree(base).await;
+                if predicate(&tree) {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("Timed out waiting for: {description}"));
+    }
 }
 
 fn tree_root_id(tree: &serde_json::Value) -> String {
@@ -246,8 +267,25 @@ async fn live_bidirectional_sync() {
     .await;
     tc.move_item(&base_b, &bm2_id, &bar_id, &work_id).await;
 
-    tc.poll_until_bookmark("Client A sees Syncthing", &base_a, "Syncthing")
-        .await;
+    let expected_bm2_id = bm2_id.clone();
+    tc.poll_until(
+        "Client A sees all changes from B (Syncthing + move)",
+        &base_a,
+        |tree| {
+            let has_syncthing = tree["bookmarks"]
+                .as_array()
+                .is_some_and(|arr| arr.iter().any(|b| b["title"] == "Syncthing"));
+            let move_applied = tree["folders"].as_array().is_some_and(|arr| {
+                arr.iter().filter(|f| f["title"] == "Work").any(|f| {
+                    f["children"]
+                        .as_array()
+                        .is_some_and(|c| c.iter().any(|id| id == &*expected_bm2_id))
+                })
+            });
+            has_syncthing && move_applied
+        },
+    )
+    .await;
 
     let tree_a = tc.get_tree(&base_a).await;
     let rust_bm = tree_a["bookmarks"]
@@ -257,21 +295,6 @@ async fn live_bidirectional_sync() {
         .find(|b| b["url"] == "https://www.rust-lang.org")
         .expect("Rust bookmark should exist");
     assert_eq!(rust_bm["title"], "Rust Lang (official)");
-
-    let work_folder = tree_a["folders"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|f| f["title"] == "Work")
-        .expect("Work folder should exist");
-    assert!(
-        work_folder["children"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|c| c == &bm2_id),
-        "Automerge should be in Work folder"
-    );
 
     tc.create_bookmark(&base_a, &bar_id, "https://crates.io", "crates.io")
         .await;

@@ -103,10 +103,10 @@
       <h2 id="add-bookmark-title">Add Bookmark</h2>
       <form hx-post="/bookmarks/new" hx-target="#folder-content" hx-swap="innerHTML"
             @htmx:after-request="$store.app.showAddModal = false"
-            x-init="htmx.process($el); htmx.ajax('GET', '/folder-options', {target: $refs.folderSelect, swap: 'innerHTML'}).then(() => { $refs.folderSelect.value = getCurrentFolderId(); }); $nextTick(() => $refs.modalName.focus())">
+            x-init="htmx.process($el); htmx.ajax('GET', '/folder-options', {target: $refs.folderSelect, swap: 'innerHTML'}).then(() => { $refs.folderSelect.value = getCurrentFolderId(); })">
         <div class="detail-field">
           <label>Name</label>
-          <input type="text" name="title" placeholder="Bookmark name" required x-ref="modalName" :value="$store.app.prefillTitle || ''">
+          <input type="text" name="title" placeholder="Bookmark name" required x-ref="modalName" :value="$store.app.prefillTitle || ''" x-init="$el.focus()">
         </div>
         <div class="detail-field">
           <label>URL</label>

@@ -28,6 +28,7 @@ test.describe('Move items', () => {
     await page.locator('.fab-btn').click();
     await page.locator('.fab-menu-item', { hasText: 'New Bookmark' }).click();
     const bmModal = page.locator('.modal-overlay').first();
+    await expect(bmModal.locator('input[name="title"]')).toBeFocused();
     await bmModal.locator('input[name="title"]').fill('Moveable Bookmark');
     await bmModal.locator('input[name="url"]').fill('https://moveable.example.com');
     await bmModal.locator('button[type="submit"]').click();
