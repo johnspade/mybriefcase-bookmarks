@@ -2,6 +2,35 @@
 <form hx-post="/bookmarks/{{ id }}/edit" hx-target="#detail-body" hx-swap="innerHTML"
       @htmx:after-request="if ($event.detail.pathInfo.requestPath === '/bookmarks/{{ id }}/edit') $store.app.showEditModal = false"
       x-init="htmx.process($el); $nextTick(() => $refs.editTitle.focus())">
+  <div class="favicon-hero">
+    <div id="favicon-preview">
+{% if !favicon.is_empty() %}      <div class="detail-icon-wrap"><img class="favicon favicon-xl" src="/favicons/{{ favicon }}" alt=""></div>
+{% else %}      <div class="detail-icon-wrap"><span class="favicon favicon-xl" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span></div>
+{% endif %}      <input type="hidden" name="favicon" value="{{ favicon }}">
+    </div>
+    <div class="favicon-controls">
+      <div class="favicon-buttons">
+        <button type="button" class="btn btn-ghost btn-sm"
+                hx-post="/bookmarks/{{ id }}/fetch-favicon"
+                hx-target="#favicon-preview" hx-swap="outerHTML"
+                hx-disabled-elt=".favicon-buttons button"
+                hx-indicator="#favicon-spinner">
+          <span id="favicon-spinner" class="htmx-indicator spinner-sm"></span>
+          Refetch
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm"
+                x-show="$el.closest('form').querySelector('input[name=favicon]').value !== ''"
+                @click="
+                  let form = $el.closest('form');
+                  form.querySelector('input[name=favicon]').value = '';
+                  form.querySelector('#favicon-preview').innerHTML =
+                    '<div class=&quot;detail-icon-wrap&quot;><span class=&quot;favicon favicon-xl&quot; :style=&quot;\'background:\' + \'{{ domain_color }}\'&quot;>{{ domain_letter }}</span></div><input type=&quot;hidden&quot; name=&quot;favicon&quot; value=&quot;&quot;>';
+                ">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
   <div class="detail-field">
     <label>Name</label>
     <input type="text" name="title" value="{{ title }}" x-ref="editTitle">
@@ -25,35 +54,6 @@
       {% endif %}
       {% endfor %}
     </select>
-  </div>
-  <div class="detail-field">
-    <label>Favicon</label>
-    <div class="favicon-controls">
-      <div id="favicon-preview">
-{% if !favicon.is_empty() %}        <img class="favicon favicon-lg" src="/favicons/{{ favicon }}" alt="">
-{% else %}        <span class="favicon favicon-lg" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span>
-{% endif %}        <input type="hidden" name="favicon" value="{{ favicon }}">
-      </div>
-      <div class="favicon-buttons">
-        <button type="button" class="btn btn-ghost btn-sm"
-                hx-post="/bookmarks/{{ id }}/fetch-favicon"
-                hx-target="#favicon-preview" hx-swap="outerHTML"
-                hx-disabled-elt=".favicon-buttons button"
-                hx-indicator="#favicon-spinner">
-          <span id="favicon-spinner" class="htmx-indicator spinner-sm"></span>
-          Refetch
-        </button>
-        <button type="button" class="btn btn-ghost btn-sm"
-                x-show="$el.closest('form').querySelector('input[name=favicon]').value !== ''"
-                @click="
-                  $el.closest('form').querySelector('input[name=favicon]').value = '';
-                  $el.closest('.favicon-controls').querySelector('#favicon-preview').innerHTML =
-                    '<span class=&quot;favicon favicon-lg&quot; :style=&quot;\'background:\' + \'{{ domain_color }}\'&quot;>{{ domain_letter }}</span><input type=&quot;hidden&quot; name=&quot;favicon&quot; value=&quot;&quot;>';
-                ">
-          Delete
-        </button>
-      </div>
-    </div>
   </div>
   <div class="modal-actions">
     <button type="button" class="btn btn-ghost" @click="$store.app.showEditModal = false">Cancel</button>
