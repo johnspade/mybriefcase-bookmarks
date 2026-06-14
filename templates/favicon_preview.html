@@ -1,0 +1,6 @@
+<div id="favicon-preview">
+{% if !error.is_empty() %}  <div class="favicon-error">{{ error }}</div>
+{% endif %}{% if !favicon.is_empty() %}  <img class="favicon favicon-lg" src="/favicons/{{ favicon }}" alt="">
+{% else %}  <span class="favicon favicon-lg" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span>
+{% endif %}  <input type="hidden" name="favicon" value="{{ favicon }}">
+</div>

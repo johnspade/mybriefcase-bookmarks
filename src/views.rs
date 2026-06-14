@@ -91,6 +91,7 @@ pub struct UpdateBookmarkForm {
     url: Option<String>,
     notes: Option<String>,
     folder_id: Option<String>,
+    favicon: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -174,7 +175,19 @@ struct EditBookmarkTemplate {
     title: String,
     url: String,
     notes: String,
+    favicon: String,
+    domain_color: String,
+    domain_letter: String,
     folders: Vec<(String, String, bool)>,
+}
+
+#[derive(Template)]
+#[template(path = "favicon_preview.html")]
+struct FaviconPreviewTemplate {
+    favicon: String,
+    domain_color: String,
+    domain_letter: String,
+    error: String,
 }
 
 #[derive(Template)]
@@ -710,6 +723,9 @@ pub async fn bookmark_edit_form(
         title: bm.title.clone(),
         url: bm.url.clone(),
         notes: bm.notes.clone(),
+        favicon: bm.favicon.clone(),
+        domain_color: domain_color(&bm.url),
+        domain_letter: domain_letter(&bm.url),
         folders,
     };
 
@@ -789,6 +805,22 @@ pub async fn update_bookmark_html(
                 form.notes.as_deref(),
             )?;
 
+            if let Some(ref favicon) = form.favicon {
+                ops::update_favicon(doc, &id, favicon)?;
+                if !favicon.is_empty() {
+                    let store: BookmarkStore =
+                        doc.with_doc(|d| autosurgeon::hydrate(d).map_err(anyhow::Error::from))?;
+                    if let Some(bm) = store.bookmarks.get(&id) {
+                        let url = bm.url.clone();
+                        for (other_id, other_bm) in &store.bookmarks {
+                            if other_id != &id && other_bm.url == url && !other_bm.deleted {
+                                ops::update_favicon(doc, other_id, favicon)?;
+                            }
+                        }
+                    }
+                }
+            }
+
             if let Some(ref new_folder_id) = form.folder_id {
                 let store: BookmarkStore =
                     doc.with_doc(|d| autosurgeon::hydrate(d).map_err(anyhow::Error::from))?;
@@ -852,6 +884,61 @@ pub async fn update_bookmark_html(
     );
 
     Ok(Html(response).into_response())
+}
+
+/// # Errors
+/// Returns `500 Internal Server Error` if template rendering fails.
+pub async fn fetch_favicon_html(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Html<String>, StatusCode> {
+    let store = read_store(&state.doc_handle)?;
+    let bm = store
+        .bookmarks
+        .get(&id)
+        .filter(|b| !b.deleted)
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let url = bm.url.clone();
+    let color = domain_color(&url);
+    let letter = domain_letter(&url);
+
+    let favicon_url = match crate::favicon::discover_favicon_url(&url).await {
+        Ok(u) => u,
+        Err(e) => {
+            let template = FaviconPreviewTemplate {
+                favicon: bm.favicon.clone(),
+                domain_color: color,
+                domain_letter: letter,
+                error: format!("Could not fetch favicon: {e}"),
+            };
+            return Ok(Html(render(&template)?));
+        }
+    };
+
+    let filename = match crate::favicon::fetch_and_store(&state.sync_root, &favicon_url).await {
+        Ok(f) => f,
+        Err(e) => {
+            let template = FaviconPreviewTemplate {
+                favicon: bm.favicon.clone(),
+                domain_color: color,
+                domain_letter: letter,
+                error: format!("Could not fetch favicon: {e}"),
+            };
+            return Ok(Html(render(&template)?));
+        }
+    };
+
+    ops::update_favicon(&state.doc_handle, &id, &filename)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let template = FaviconPreviewTemplate {
+        favicon: filename,
+        domain_color: color,
+        domain_letter: letter,
+        error: String::new(),
+    };
+    Ok(Html(render(&template)?))
 }
 
 /// # Errors

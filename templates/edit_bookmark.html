@@ -26,6 +26,35 @@
       {% endfor %}
     </select>
   </div>
+  <div class="detail-field">
+    <label>Favicon</label>
+    <div class="favicon-controls">
+      <div id="favicon-preview">
+{% if !favicon.is_empty() %}        <img class="favicon favicon-lg" src="/favicons/{{ favicon }}" alt="">
+{% else %}        <span class="favicon favicon-lg" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span>
+{% endif %}        <input type="hidden" name="favicon" value="{{ favicon }}">
+      </div>
+      <div class="favicon-buttons">
+        <button type="button" class="btn btn-ghost btn-sm"
+                hx-post="/bookmarks/{{ id }}/fetch-favicon"
+                hx-target="#favicon-preview" hx-swap="outerHTML"
+                hx-disabled-elt=".favicon-buttons button"
+                hx-indicator="#favicon-spinner">
+          <span id="favicon-spinner" class="htmx-indicator spinner-sm"></span>
+          Refetch
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm"
+                x-show="$el.closest('form').querySelector('input[name=favicon]').value !== ''"
+                @click="
+                  $el.closest('form').querySelector('input[name=favicon]').value = '';
+                  $el.closest('.favicon-controls').querySelector('#favicon-preview').innerHTML =
+                    '<span class=&quot;favicon favicon-lg&quot; :style=&quot;\'background:\' + \'{{ domain_color }}\'&quot;>{{ domain_letter }}</span><input type=&quot;hidden&quot; name=&quot;favicon&quot; value=&quot;&quot;>';
+                ">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
   <div class="modal-actions">
     <button type="button" class="btn btn-ghost" @click="$store.app.showEditModal = false">Cancel</button>
     <button type="submit" class="btn btn-primary">

@@ -79,6 +79,10 @@ fn build_router(state: Arc<state::AppState>) -> Router {
         .route("/folders/new", post(views::create_folder_html))
         .route("/bookmarks/new", post(views::create_bookmark_html))
         .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
+        .route(
+            "/bookmarks/{id}/fetch-favicon",
+            post(views::fetch_favicon_html),
+        )
         .route("/bookmarks/{id}/history", get(views::bookmark_history_html))
         .route("/bookmarks/{id}/revert", post(views::revert_bookmark_html))
         .route("/bookmarks/{id}/remove", post(views::delete_bookmark_html))
