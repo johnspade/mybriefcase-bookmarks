@@ -51,6 +51,7 @@ infer = "0.19.0"
 mybriefcase-bookmarks-core = { path = "crates/core" }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 rust-embed = { version = "8.11.0", features = ["axum-ex"] }
+scraper = "0.22"
 schemars = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -58,6 +59,7 @@ sha2 = "0.10"
 tokio = { version = "1.27", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tower-http = { version = "0.6", features = ["catch-panic"] }
+url = "2"
 
 [features]
 slow-tests = []

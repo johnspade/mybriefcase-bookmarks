@@ -1512,6 +1512,7 @@ dependencies = [
  "reqwest",
  "rust-embed",
  "schemars",
+ "scraper",
  "serde",
  "serde_json",
  "sha2 0.10.8",
@@ -1520,6 +1521,7 @@ dependencies = [
  "tokio-stream",
  "tower",
  "tower-http",
+ "url",
  "uuid",
 ]
 

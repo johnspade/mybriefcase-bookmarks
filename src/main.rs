@@ -83,6 +83,10 @@ fn build_router(state: Arc<state::AppState>) -> Router {
         .route("/bookmarks/new", post(handlers::create_bookmark_html))
         .route("/bookmarks/{id}/edit", post(handlers::update_bookmark_html))
         .route(
+            "/bookmarks/{id}/fetch-favicon",
+            post(handlers::fetch_favicon_html),
+        )
+        .route(
             "/bookmarks/{id}/history",
             get(handlers::bookmark_history_html),
         )
