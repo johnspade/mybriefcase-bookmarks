@@ -67,21 +67,21 @@ Run:
 
 ## Validation
 
-Run all checks before committing:
+All CI checks are defined as Nix flake outputs and can be run locally with a single command:
 
 ```bash
-just validate
+nix run .#validate        # checks + miri + E2E (no Docker)
+nix run .#validate-all    # everything including Docker build + smoke test
 ```
 
-This runs: `fmt`, `clippy`, `test`, `deny`, `audit`, `doc` — the same checks CI enforces.
+Individual steps:
 
-To include E2E (Playwright) tests as well:
-
-```bash
-just validate-all
-```
-
-Individual checks are also available (e.g. `just fmt`, `just test`). Run `just` to see all recipes.
+| Command | What it runs |
+|---------|-------------|
+| `nix flake check` | fmt, clippy, test, deny, audit, doc, lint-frontend |
+| `nix run .#miri` | Miri (nightly toolchain) |
+| `nix run .#e2e` | Build binary + Playwright E2E tests |
+| `nix run .#docker-test` | Build Docker image + smoke test |
 
 ## Releases
 
