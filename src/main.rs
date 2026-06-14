@@ -1,4 +1,4 @@
-use mybriefcase_bookmarks::{api, identity, repo, state, views, watcher};
+use mybriefcase_bookmarks::{api, handlers, identity, repo, state, watcher};
 
 use axum::Router;
 use axum::routing::{get, post, put};
@@ -66,30 +66,42 @@ fn write_peer_info(sync_root: &std::path::Path, client_id: &str) {
 fn build_router(state: Arc<state::AppState>) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        .route("/", get(views::index_page))
-        .route("/folders/{id}", get(views::dispatch_get_folder))
+        .route("/", get(handlers::index_page))
+        .route("/folders/{id}", get(handlers::dispatch_get_folder))
         .route(
             "/bookmarks/{id}",
-            get(views::bookmark_detail)
+            get(handlers::bookmark_detail)
                 .put(api::update_bookmark)
                 .delete(api::delete_bookmark),
         )
-        .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
-        .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
-        .route("/folders/new", post(views::create_folder_html))
-        .route("/bookmarks/new", post(views::create_bookmark_html))
-        .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
-        .route("/bookmarks/{id}/history", get(views::bookmark_history_html))
-        .route("/bookmarks/{id}/revert", post(views::revert_bookmark_html))
-        .route("/bookmarks/{id}/remove", post(views::delete_bookmark_html))
-        .route("/folders/{id}/remove", post(views::delete_folder_html))
-        .route("/folders/{id}/rename", post(views::rename_folder_html))
-        .route("/items/move", post(views::move_item_html))
-        .route("/move-picker/{id}", get(views::move_picker_html))
-        .route("/events", get(views::sse_events))
-        .route("/sidebar", get(views::sidebar_only))
-        .route("/search", get(views::search))
-        .route("/folders/{id}/content", get(views::folder_content))
+        .route("/bookmarks/{id}/detail", get(handlers::bookmark_detail))
+        .route(
+            "/bookmarks/{id}/edit-form",
+            get(handlers::bookmark_edit_form),
+        )
+        .route("/folders/new", post(handlers::create_folder_html))
+        .route("/bookmarks/new", post(handlers::create_bookmark_html))
+        .route("/bookmarks/{id}/edit", post(handlers::update_bookmark_html))
+        .route(
+            "/bookmarks/{id}/history",
+            get(handlers::bookmark_history_html),
+        )
+        .route(
+            "/bookmarks/{id}/revert",
+            post(handlers::revert_bookmark_html),
+        )
+        .route(
+            "/bookmarks/{id}/remove",
+            post(handlers::delete_bookmark_html),
+        )
+        .route("/folders/{id}/remove", post(handlers::delete_folder_html))
+        .route("/folders/{id}/rename", post(handlers::rename_folder_html))
+        .route("/items/move", post(handlers::move_item_html))
+        .route("/move-picker/{id}", get(handlers::move_picker_html))
+        .route("/events", get(handlers::sse_events))
+        .route("/sidebar", get(handlers::sidebar_only))
+        .route("/search", get(handlers::search))
+        .route("/folders/{id}/content", get(handlers::folder_content))
         .route("/api/tree", get(api::get_tree))
         .route("/api/folders/{id}", get(api::get_folder))
         .route("/api/folders", post(api::create_folder))
@@ -108,11 +120,11 @@ fn build_router(state: Arc<state::AppState>) -> Router {
         )
         .route("/api/bookmarks/{id}/revert", post(api::revert_bookmark))
         .route("/api/move", post(api::move_item))
-        .route("/settings", get(views::settings_page))
-        .route("/folder-options", get(views::folder_options))
-        .route("/import", post(views::import_bookmarks_html))
+        .route("/settings", get(handlers::settings_page))
+        .route("/folder-options", get(handlers::folder_options))
+        .route("/import", post(handlers::import_bookmarks_html))
         .route("/export", get(api::export_bookmarks))
-        .route("/favicons/{filename}", get(views::serve_favicon))
+        .route("/favicons/{filename}", get(handlers::serve_favicon))
         .nest_service("/static", ServeEmbed::<StaticAssets>::new())
         .with_state(state)
         .layer(CatchPanicLayer::new())
