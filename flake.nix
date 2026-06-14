@@ -145,6 +145,12 @@
             cargoDocExtraArgs = "--no-deps --all-features";
           });
 
+          coverage = craneLib.cargoLlvmCov (commonArgs // {
+            inherit cargoArtifacts;
+            cargoLlvmCovExtraArgs = "--all-features --fail-under-lines 75";
+            installPhase = "touch $out";
+          });
+
           lint-frontend = pkgs.buildNpmPackage {
             pname = "mybriefcase-lint-frontend";
             version = "0.0.1";
@@ -256,6 +262,7 @@
             cargo-audit
             cargo-deny
             cargo-edit
+            cargo-llvm-cov
             cargo-watch
             rust-analyzer
             nodejs_22
