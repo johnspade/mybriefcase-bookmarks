@@ -37,6 +37,10 @@ fn build_views_app() -> (Router, String) {
             get(handlers::bookmark_edit_form),
         )
         .route("/bookmarks/{id}/edit", post(handlers::update_bookmark_html))
+        .route(
+            "/bookmarks/{id}/fetch-favicon",
+            post(handlers::fetch_favicon_html),
+        )
         .route("/bookmarks/new", post(handlers::create_bookmark_html))
         .route("/settings", get(handlers::settings_page))
         .route("/folder-options", get(handlers::folder_options))
@@ -71,6 +75,10 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
             get(handlers::bookmark_edit_form),
         )
         .route("/bookmarks/{id}/edit", post(handlers::update_bookmark_html))
+        .route(
+            "/bookmarks/{id}/fetch-favicon",
+            post(handlers::fetch_favicon_html),
+        )
         .route("/bookmarks/new", post(handlers::create_bookmark_html))
         .route("/settings", get(handlers::settings_page))
         .route("/folder-options", get(handlers::folder_options))
@@ -693,4 +701,204 @@ async fn rename_folder_updates_title() {
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("Renamed Folder"));
     assert!(!html.contains("Original Name"));
+}
+
+// ─── Favicon management tests ────────────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_bookmark_saves_favicon_field() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+
+    let (status, _) = post_form(
+        app,
+        &format!("/bookmarks/{bm_id}/edit"),
+        "title=Test&url=https%3A%2F%2Fexample.com&notes=&favicon=abc123.png",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let bm = store.bookmarks.get(&bm_id).unwrap();
+    assert_eq!(bm.favicon, "abc123.png");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_bookmark_clears_favicon() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+    ops::update_favicon(&doc, &bm_id, "existing.png").unwrap();
+
+    let (status, _) = post_form(
+        app,
+        &format!("/bookmarks/{bm_id}/edit"),
+        "title=Test&url=https%3A%2F%2Fexample.com&notes=&favicon=",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let bm = store.bookmarks.get(&bm_id).unwrap();
+    assert_eq!(bm.favicon, "");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_bookmark_favicon_propagates_to_same_url() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm1 = ops::add_bookmark(&doc, &root_id, "https://example.com", "One").unwrap();
+    let bm2 = ops::add_bookmark(&doc, &root_id, "https://example.com", "Two").unwrap();
+
+    let (status, _) = post_form(
+        app,
+        &format!("/bookmarks/{bm1}/edit"),
+        "title=One&url=https%3A%2F%2Fexample.com&notes=&favicon=new-icon.png",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    assert_eq!(store.bookmarks.get(&bm1).unwrap().favicon, "new-icon.png");
+    assert_eq!(store.bookmarks.get(&bm2).unwrap().favicon, "new-icon.png");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_bookmark_favicon_delete_does_not_propagate() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm1 = ops::add_bookmark(&doc, &root_id, "https://example.com", "One").unwrap();
+    let bm2 = ops::add_bookmark(&doc, &root_id, "https://example.com", "Two").unwrap();
+    ops::update_favicon(&doc, &bm1, "shared.png").unwrap();
+    ops::update_favicon(&doc, &bm2, "shared.png").unwrap();
+
+    let (status, _) = post_form(
+        app,
+        &format!("/bookmarks/{bm1}/edit"),
+        "title=One&url=https%3A%2F%2Fexample.com&notes=&favicon=",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    assert_eq!(store.bookmarks.get(&bm1).unwrap().favicon, "");
+    assert_eq!(store.bookmarks.get(&bm2).unwrap().favicon, "shared.png");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn fetch_favicon_endpoint_returns_partial_with_img() {
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let icon_bytes: Vec<u8> = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
+
+    let icon_clone = icon_bytes.clone();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        loop {
+            let Ok((mut stream, _)) = listener.accept() else {
+                break;
+            };
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let req = String::from_utf8_lossy(&buf);
+            let response = if req.contains("GET /favicon.ico") {
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\n\r\n",
+                    icon_clone.len()
+                )
+            } else {
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 50\r\n\r\n<html><head><link rel=\"icon\" href=\"/favicon.ico\"></head></html>".to_string()
+            };
+            let _ = stream.write_all(response.as_bytes());
+            if req.contains("GET /favicon.ico") {
+                let _ = stream.write_all(&icon_clone);
+            }
+            let _ = stream.flush();
+        }
+    });
+
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let url = format!("http://127.0.0.1:{port}/page");
+    let encoded_url = url.replace(':', "%3A").replace('/', "%2F");
+    let body = format!("folder_id={root_id}&url={encoded_url}&title=Test");
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/bookmarks/new")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let html_resp = String::from_utf8_lossy(&bytes).to_string();
+    let marker = "hx-get=\"/bookmarks/";
+    let start = html_resp.find(marker).unwrap() + marker.len();
+    let end = html_resp[start..].find('/').unwrap() + start;
+    let bm_id = &html_resp[start..end];
+
+    let (status, html) = post_form(app, &format!("/bookmarks/{bm_id}/fetch-favicon"), "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("<img"), "response should contain an img tag");
+    assert!(
+        html.contains("name=\"favicon\""),
+        "response should contain the hidden favicon input"
+    );
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let bm = store.bookmarks.get(bm_id).unwrap();
+    assert!(!bm.favicon.is_empty(), "favicon should be stored");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn fetch_favicon_endpoint_error_returns_inline_message() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "http://127.0.0.1:1/unreachable", "Bad").unwrap();
+
+    let (status, html) = post_form(app, &format!("/bookmarks/{bm_id}/fetch-favicon"), "").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains("Could not fetch favicon"),
+        "should show inline error"
+    );
+    assert!(
+        html.contains("name=\"favicon\""),
+        "should still contain hidden input"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_form_contains_favicon_section() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+    ops::update_favicon(&doc, &bm_id, "test-icon.png").unwrap();
+
+    let (status, html) = get_html(app, &format!("/bookmarks/{bm_id}/edit-form")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains("name=\"favicon\""),
+        "edit form should have hidden favicon input"
+    );
+    assert!(
+        html.contains("test-icon.png"),
+        "edit form should show current favicon"
+    );
+    assert!(
+        html.contains("fetch-favicon"),
+        "edit form should have refetch button"
+    );
+    assert!(html.contains("Refetch"), "should have Refetch label");
+    assert!(html.contains("Delete"), "should have Delete label");
 }

@@ -1,8 +1,10 @@
+use scraper::{Html, Selector};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+use url::Url;
 
 const MAX_FAVICON_SIZE: usize = 256 * 1024;
-const USER_AGENT: &str = "MyBriefcase/1.0 (favicon fetcher)";
+const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 fn is_valid_image(data: &[u8]) -> bool {
     if infer::get(data).is_some_and(|t| t.matcher_type() == infer::MatcherType::Image) {
@@ -57,6 +59,105 @@ pub async fn fetch_and_store(sync_root: &Path, favicon_url: &str) -> anyhow::Res
         }
     }
     Err(last_err.unwrap_or_else(|| anyhow::anyhow!("favicon fetch failed")))
+}
+
+/// Fetches a page at `page_url`, discovers its favicon link tags, and returns the best favicon URL.
+/// Falls back to `{origin}/favicon.ico` if no `<link>` tags found.
+/// # Errors
+/// Returns an error if the page cannot be fetched or no favicon can be discovered.
+pub async fn discover_favicon_url(page_url: &str) -> anyhow::Result<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent(USER_AGENT)
+        .build()?;
+
+    let resp = client.get(page_url).send().await?.error_for_status()?;
+    let final_url = resp.url().clone();
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    if !content_type.contains("text/html") {
+        let origin = origin_url(&final_url)?;
+        return Ok(format!("{origin}/favicon.ico"));
+    }
+
+    let body = resp.text().await?;
+    if let Some(icon_url) = find_best_icon_link(&body, &final_url) {
+        return Ok(icon_url);
+    }
+
+    let origin = origin_url(&final_url)?;
+    Ok(format!("{origin}/favicon.ico"))
+}
+
+fn origin_url(url: &Url) -> anyhow::Result<String> {
+    let origin = url.origin();
+    match origin {
+        url::Origin::Tuple(scheme, host, port) => {
+            let default_port = match scheme.as_str() {
+                "https" => 443,
+                "http" => 80,
+                _ => 0,
+            };
+            if port == default_port {
+                Ok(format!("{scheme}://{host}"))
+            } else {
+                Ok(format!("{scheme}://{host}:{port}"))
+            }
+        }
+        url::Origin::Opaque(_) => anyhow::bail!("opaque origin"),
+    }
+}
+
+fn find_best_icon_link(html_body: &str, base_url: &Url) -> Option<String> {
+    let document = Html::parse_document(html_body);
+    let selector =
+        Selector::parse("link[rel~=\"icon\"], link[rel=\"apple-touch-icon\"], link[rel=\"apple-touch-icon-precomposed\"]")
+            .ok()?;
+
+    let mut best: Option<(u32, String)> = None;
+    for element in document.select(&selector) {
+        let Some(href) = element.value().attr("href") else {
+            continue;
+        };
+        let Ok(abs_url) = base_url.join(href) else {
+            continue;
+        };
+
+        let size = parse_size(element.value().attr("sizes"));
+        let rel = element.value().attr("rel").unwrap_or("");
+        let effective_size = if size > 0 {
+            size
+        } else if rel.contains("apple-touch-icon") {
+            180
+        } else {
+            16
+        };
+
+        if best.as_ref().is_none_or(|(s, _)| effective_size > *s) {
+            best = Some((effective_size, abs_url.to_string()));
+        }
+    }
+
+    best.map(|(_, url)| url)
+}
+
+fn parse_size(sizes_attr: Option<&str>) -> u32 {
+    let Some(sizes) = sizes_attr else {
+        return 0;
+    };
+    sizes
+        .split_whitespace()
+        .filter_map(|s| {
+            let (w, _) = s.split_once('x').or_else(|| s.split_once('X'))?;
+            w.parse::<u32>().ok()
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 async fn attempt_fetch(client: &reqwest::Client, url: &str) -> anyhow::Result<(Vec<u8>, String)> {
@@ -195,5 +296,57 @@ mod tests {
     fn is_retryable_detects_server_errors() {
         let err = anyhow::anyhow!("not a reqwest error");
         assert!(!is_retryable(&err));
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn find_best_icon_link_picks_largest() {
+        let html = r#"<html><head>
+            <link rel="icon" href="/small.png" sizes="16x16">
+            <link rel="icon" href="/large.png" sizes="64x64">
+            <link rel="icon" href="/medium.png" sizes="32x32">
+        </head></html>"#;
+        let base = Url::parse("https://example.com/page").unwrap();
+        let result = find_best_icon_link(html, &base).unwrap();
+        assert_eq!(result, "https://example.com/large.png");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn find_best_icon_link_prefers_apple_touch_icon() {
+        let html = r#"<html><head>
+            <link rel="icon" href="/icon.png" sizes="32x32">
+            <link rel="apple-touch-icon" href="/apple.png">
+        </head></html>"#;
+        let base = Url::parse("https://example.com/").unwrap();
+        let result = find_best_icon_link(html, &base).unwrap();
+        assert_eq!(result, "https://example.com/apple.png");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn find_best_icon_link_resolves_relative_urls() {
+        let html = r#"<html><head>
+            <link rel="icon" href="../img/icon.png">
+        </head></html>"#;
+        let base = Url::parse("https://example.com/path/page").unwrap();
+        let result = find_best_icon_link(html, &base).unwrap();
+        assert_eq!(result, "https://example.com/img/icon.png");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn find_best_icon_link_returns_none_when_no_links() {
+        let html = r"<html><head><title>No icons</title></head></html>";
+        let base = Url::parse("https://example.com/").unwrap();
+        assert!(find_best_icon_link(html, &base).is_none());
+    }
+
+    #[test]
+    fn parse_size_extracts_largest_dimension() {
+        assert_eq!(parse_size(Some("32x32")), 32);
+        assert_eq!(parse_size(Some("16x16 32x32 64x64")), 64);
+        assert_eq!(parse_size(Some("any")), 0);
+        assert_eq!(parse_size(None), 0);
     }
 }

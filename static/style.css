@@ -446,6 +446,14 @@ img.favicon { object-fit: contain; display: block; }
 .favicon-lg { width: 28px; height: 28px; font-size: var(--text-sm); }
 .favicon-xl { width: 36px; height: 36px; font-size: var(--text-lg); }
 
+.favicon-hero {
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  margin-bottom: var(--space-4);
+}
+.favicon-controls { display: flex; align-items: center; justify-content: center; gap: var(--space-2); }
+.favicon-buttons { display: flex; gap: var(--space-2); }
+.btn-sm { min-height: unset; padding: var(--space-1) var(--space-2); font-size: var(--text-2xs); }
+
 .modal-overlay {
   position: fixed; inset: 0; background: rgb(0 0 0 / 30%);
   display: flex; align-items: center; justify-content: center; z-index: 1000;
@@ -567,6 +575,7 @@ body.drawer-open { overflow: hidden; }
   .settings-popover { min-width: 180px; }
 
   .btn { min-height: 44px; padding: var(--space-3) var(--space-4); }
+  .btn-sm { min-height: unset; padding: var(--space-1) var(--space-1-5); font-size: var(--text-3xs); }
   .sidebar-action-btn { min-height: 44px; }
 
   .detail-close { display: flex; width: 44px; height: 44px; }
