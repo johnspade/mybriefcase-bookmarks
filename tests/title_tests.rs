@@ -22,7 +22,7 @@ fn build_html_app(
     client_id: String,
 ) -> Router {
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
-    let state = Arc::new(mybriefcase_bookmarks::api::AppState {
+    let state = Arc::new(mybriefcase_bookmarks::state::AppState {
         doc_handle,
         sync_root,
         client_id,

@@ -11,14 +11,7 @@ use crate::export::export_netscape_html;
 use crate::history;
 use crate::model::BookmarkStore;
 use crate::ops;
-
-pub struct AppState {
-    pub doc_handle: DocHandle,
-    pub sync_root: std::path::PathBuf,
-    pub client_id: String,
-    pub sse_tx: tokio::sync::broadcast::Sender<()>,
-    pub static_version: String,
-}
+use crate::state::AppState;
 
 #[derive(Serialize)]
 pub struct FolderResponse {
@@ -77,11 +70,6 @@ pub struct MoveRequest {
 
 fn read_store(doc_handle: &DocHandle) -> Result<BookmarkStore, StatusCode> {
     doc_handle.with_doc(|doc| hydrate(doc).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR))
-}
-
-fn after_write(state: &AppState) {
-    crate::repo::export_doc_to_shared(&state.doc_handle, &state.sync_root, &state.client_id);
-    let _ = state.sse_tx.send(());
 }
 
 /// # Errors
@@ -149,9 +137,9 @@ pub async fn create_folder(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateFolderRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), StatusCode> {
-    let id = ops::create_folder(&state.doc_handle, &req.parent_folder_id, &req.title)
+    let id = state
+        .mutate(|doc| ops::create_folder(doc, &req.parent_folder_id, &req.title))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id }))))
 }
 
@@ -162,9 +150,9 @@ pub async fn create_bookmark(
     Path(folder_id): Path<String>,
     Json(req): Json<CreateBookmarkRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), StatusCode> {
-    let id = ops::add_bookmark(&state.doc_handle, &folder_id, &req.url, &req.title)
+    let id = state
+        .mutate(|doc| ops::add_bookmark(doc, &folder_id, &req.url, &req.title))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id }))))
 }
 
@@ -175,15 +163,17 @@ pub async fn update_bookmark(
     Path(id): Path<String>,
     Json(req): Json<UpdateBookmarkRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    ops::update_bookmark(
-        &state.doc_handle,
-        &id,
-        req.url.as_deref(),
-        req.title.as_deref(),
-        req.notes.as_deref(),
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
+    state
+        .mutate(|doc| {
+            ops::update_bookmark(
+                doc,
+                &id,
+                req.url.as_deref(),
+                req.title.as_deref(),
+                req.notes.as_deref(),
+            )
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::OK)
 }
 
@@ -193,8 +183,9 @@ pub async fn delete_bookmark(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    ops::delete_bookmark(&state.doc_handle, &id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
+    state
+        .mutate(|doc| ops::delete_bookmark(doc, &id))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -204,9 +195,9 @@ pub async fn move_item(
     State(state): State<Arc<AppState>>,
     Json(req): Json<MoveRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    ops::move_item(&state.doc_handle, &req.item, &req.source, &req.destination)
+    state
+        .mutate(|doc| ops::move_item(doc, &req.item, &req.source, &req.destination))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
     Ok(StatusCode::OK)
 }
 
@@ -261,9 +252,9 @@ pub async fn revert_bookmark(
         return Err(StatusCode::NOT_FOUND);
     }
     let hash = history::parse_change_hash(&req.target_hash).ok_or(StatusCode::BAD_REQUEST)?;
-    ops::revert_bookmark(&state.doc_handle, &id, &hash)
+    state
+        .mutate(|doc| ops::revert_bookmark(doc, &id, &hash))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
     Ok(StatusCode::OK)
 }
 

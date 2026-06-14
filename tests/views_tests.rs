@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 use common::new_initialized_doc;
-use mybriefcase_bookmarks::{api, ops, views};
+use mybriefcase_bookmarks::{ops, state, views};
 use views::SortOrder;
 
 fn build_views_app() -> (Router, String) {
@@ -21,7 +21,7 @@ fn build_views_app() -> (Router, String) {
     let root_id = td.root_folder_id.clone();
     let sync_root = tempfile::TempDir::new().unwrap();
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
-    let state = Arc::new(api::AppState {
+    let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
         client_id: "test-views".to_string(),
@@ -52,7 +52,7 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
     let doc_handle = td.doc_handle.clone();
     let sync_root = tempfile::TempDir::new().unwrap();
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
-    let state = Arc::new(api::AppState {
+    let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
         client_id: "test-views".to_string(),

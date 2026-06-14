@@ -7,5 +7,7 @@ pub mod import;
 pub mod model;
 pub mod ops;
 pub mod repo;
+pub mod schema;
+pub mod state;
 pub mod views;
 pub mod watcher;

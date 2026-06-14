@@ -14,10 +14,10 @@ use std::time::Duration;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::api::AppState;
 use crate::history;
 use crate::model::{BookmarkStore, Folder};
 use crate::ops;
+use crate::state::AppState;
 
 // ─── View data ──────────────────────────────────────
 
@@ -197,11 +197,6 @@ struct SettingsBaseTemplate {
 
 fn read_store(doc_handle: &DocHandle) -> Result<BookmarkStore, StatusCode> {
     doc_handle.with_doc(|doc| hydrate(doc).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR))
-}
-
-fn after_write(state: &AppState) {
-    crate::repo::export_doc_to_shared(&state.doc_handle, &state.sync_root, &state.client_id);
-    let _ = state.sse_tx.send(());
 }
 
 fn html_escape(s: &str) -> String {
@@ -727,9 +722,9 @@ pub async fn create_folder_html(
     State(state): State<Arc<AppState>>,
     Form(form): Form<CreateFolderForm>,
 ) -> Result<Html<String>, StatusCode> {
-    ops::create_folder(&state.doc_handle, &form.parent_folder_id, &form.title)
+    state
+        .mutate(|doc| ops::create_folder(doc, &form.parent_folder_id, &form.title))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
     render_folder_response(&state, &form.parent_folder_id, true, SortOrder::default())
 }
 
@@ -739,9 +734,9 @@ pub async fn create_bookmark_html(
     State(state): State<Arc<AppState>>,
     Form(form): Form<CreateBookmarkForm>,
 ) -> Result<Html<String>, StatusCode> {
-    let id = ops::add_bookmark(&state.doc_handle, &form.folder_id, &form.url, &form.title)
+    let id = state
+        .mutate(|doc| ops::add_bookmark(doc, &form.folder_id, &form.url, &form.title))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
 
     if !form.favicon_url.is_empty() && !form.favicon_url.starts_with("data:") {
         let sync_root = state.sync_root.clone();
@@ -784,27 +779,29 @@ pub async fn update_bookmark_html(
     Path(id): Path<String>,
     Form(form): Form<UpdateBookmarkForm>,
 ) -> Result<Response, StatusCode> {
-    ops::update_bookmark(
-        &state.doc_handle,
-        &id,
-        form.url.as_deref(),
-        form.title.as_deref(),
-        form.notes.as_deref(),
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .mutate(|doc| {
+            ops::update_bookmark(
+                doc,
+                &id,
+                form.url.as_deref(),
+                form.title.as_deref(),
+                form.notes.as_deref(),
+            )?;
 
-    if let Some(ref new_folder_id) = form.folder_id {
-        let store = read_store(&state.doc_handle)?;
-        let current_folder_id = find_folder_for_bookmark(&store, &id)
-            .unwrap_or(&store.root_folder_id)
-            .to_string();
-        if *new_folder_id != current_folder_id {
-            ops::move_item(&state.doc_handle, &id, &current_folder_id, new_folder_id)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        }
-    }
-
-    after_write(&state);
+            if let Some(ref new_folder_id) = form.folder_id {
+                let store: BookmarkStore =
+                    doc.with_doc(|d| autosurgeon::hydrate(d).map_err(anyhow::Error::from))?;
+                let current_folder_id = find_folder_for_bookmark(&store, &id)
+                    .unwrap_or(&store.root_folder_id)
+                    .to_string();
+                if *new_folder_id != current_folder_id {
+                    ops::move_item(doc, &id, &current_folder_id, new_folder_id)?;
+                }
+            }
+            Ok(())
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let store = read_store(&state.doc_handle)?;
     let Some(bm) = store.bookmarks.get(&id) else {
@@ -864,8 +861,9 @@ pub async fn delete_bookmark_html(
     Path(id): Path<String>,
     Form(form): Form<DeleteForm>,
 ) -> Result<Html<String>, StatusCode> {
-    ops::delete_bookmark(&state.doc_handle, &id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
+    state
+        .mutate(|doc| ops::delete_bookmark(doc, &id))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     render_folder_response(&state, &form.current_folder_id, true, SortOrder::default())
 }
 
@@ -876,8 +874,9 @@ pub async fn delete_folder_html(
     Path(id): Path<String>,
     Form(form): Form<DeleteForm>,
 ) -> Result<Html<String>, StatusCode> {
-    ops::delete_folder(&state.doc_handle, &id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
+    state
+        .mutate(|doc| ops::delete_folder(doc, &id))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let target = if form.current_folder_id == id {
         let store = read_store(&state.doc_handle)?;
         store.root_folder_id
@@ -894,9 +893,9 @@ pub async fn rename_folder_html(
     Path(id): Path<String>,
     Form(form): Form<RenameFolderForm>,
 ) -> Result<Html<String>, StatusCode> {
-    ops::rename_folder(&state.doc_handle, &id, &form.title)
+    state
+        .mutate(|doc| ops::rename_folder(doc, &id, &form.title))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
     render_folder_response(&state, &form.current_folder_id, true, SortOrder::default())
 }
 
@@ -907,21 +906,16 @@ pub async fn move_item_html(
     State(state): State<Arc<AppState>>,
     Form(form): Form<MoveItemForm>,
 ) -> Result<Html<String>, StatusCode> {
-    ops::move_item(
-        &state.doc_handle,
-        &form.item,
-        &form.source,
-        &form.destination,
-    )
-    .map_err(|e| {
-        let msg = e.to_string();
-        if msg.contains("cycle") || msg.contains("itself") || msg.contains("subtree") {
-            StatusCode::UNPROCESSABLE_ENTITY
-        } else {
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    })?;
-    after_write(&state);
+    state
+        .mutate(|doc| ops::move_item(doc, &form.item, &form.source, &form.destination))
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("cycle") || msg.contains("itself") || msg.contains("subtree") {
+                StatusCode::UNPROCESSABLE_ENTITY
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+        })?;
     render_folder_response(&state, &form.destination, true, SortOrder::default())
 }
 
@@ -1250,9 +1244,9 @@ pub async fn revert_bookmark_html(
     Form(form): Form<RevertForm>,
 ) -> Result<Response, StatusCode> {
     let hash = history::parse_change_hash(&form.target_hash).ok_or(StatusCode::BAD_REQUEST)?;
-    ops::revert_bookmark(&state.doc_handle, &id, &hash)
+    state
+        .mutate(|doc| ops::revert_bookmark(doc, &id, &hash))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    after_write(&state);
 
     let store = read_store(&state.doc_handle)?;
     let Some(bm) = store.bookmarks.get(&id) else {
@@ -1350,19 +1344,22 @@ pub async fn import_bookmarks_html(
     }
 
     let store = read_store(&state.doc_handle)?;
-    let target_folder_id = match target.as_str() {
-        "new" => {
-            let name = format!("Imported {}", chrono::Utc::now().format("%Y-%m-%d"));
-            ops::create_folder(&state.doc_handle, &store.root_folder_id, &name)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        }
-        _ => store.root_folder_id,
-    };
+    let root_id = store.root_folder_id;
 
-    ops::import_items(&state.doc_handle, &target_folder_id, &items)
+    let target_folder_id = state
+        .mutate(|doc| {
+            let folder_id = match target.as_str() {
+                "new" => {
+                    let name = format!("Imported {}", chrono::Utc::now().format("%Y-%m-%d"));
+                    ops::create_folder(doc, &root_id, &name)?
+                }
+                _ => root_id.clone(),
+            };
+            ops::import_items(doc, &folder_id, &items)?;
+            Ok(folder_id)
+        })
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    after_write(&state);
     render_folder_response(&state, &target_folder_id, true, SortOrder::default())
 }
 
