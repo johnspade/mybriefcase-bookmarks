@@ -60,3 +60,17 @@ Do not use Firefox DevTools MCP for viewport screenshots — its `set_viewport_s
 ## Project Context
 
 See [README.md](README.md) for build prerequisites, launch parameters, and dev workflow.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues on this repo (`gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
