@@ -3,6 +3,8 @@ use automerge::transaction::{CommitOptions, Transactable};
 use automerge::{ObjType, ReadDoc};
 use automerge_repo::DocHandle;
 
+use crate::schema;
+
 fn commit_opts(message: String) -> CommitOptions {
     let now = chrono::Utc::now().timestamp_millis();
     CommitOptions::default()
@@ -27,13 +29,18 @@ pub fn add_bookmark(
             .context("missing bookmarks map")?
             .1;
         let bm = tx.put_object(&bookmarks, id.as_str(), ObjType::Map)?;
-        tx.put(&bm, "url", url)?;
-        tx.put(&bm, "title", title)?;
-        tx.put(&bm, "notes", "")?;
-        tx.put(&bm, "favicon", "")?;
-        tx.put(&bm, "created_at", now.as_str())?;
-        tx.put(&bm, "updated_at", now.as_str())?;
-        tx.put(&bm, "deleted", false)?;
+        schema::write_bookmark(
+            &mut tx,
+            &bm,
+            &schema::BookmarkFields {
+                url,
+                title,
+                notes: "",
+                favicon: "",
+                created_at: &now,
+                updated_at: &now,
+            },
+        )?;
         let folders = tx
             .get(automerge::ROOT, "folders")?
             .context("missing folders map")?
@@ -43,7 +50,7 @@ pub fn add_bookmark(
             .with_context(|| format!("folder not found: {folder_id}"))?
             .1;
         let children = tx
-            .get(&folder, "children")?
+            .get(&folder, schema::CHILDREN)?
             .context("folder missing children")?
             .1;
         let len = tx.length(&children);
@@ -61,7 +68,6 @@ pub fn update_favicon(
     bookmark_id: &str,
     favicon: &str,
 ) -> anyhow::Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let bookmarks = tx
@@ -72,8 +78,7 @@ pub fn update_favicon(
             .get(&bookmarks, bookmark_id)?
             .with_context(|| format!("bookmark not found: {bookmark_id}"))?
             .1;
-        tx.put(&bm, "favicon", favicon)?;
-        tx.put(&bm, "updated_at", now.as_str())?;
+        schema::patch_bookmark(&mut tx, &bm, None, None, None, Some(favicon))?;
         tx.commit_with(commit_opts(format!("update_favicon:{bookmark_id}")));
         Ok(())
     })?;
@@ -96,17 +101,13 @@ pub fn create_folder(
             .context("missing folders map")?
             .1;
         let f = tx.put_object(&folders, id.as_str(), ObjType::Map)?;
-        tx.put(&f, "title", title)?;
-        tx.put_object(&f, "children", ObjType::List)?;
-        tx.put(&f, "created_at", now.as_str())?;
-        tx.put(&f, "updated_at", now.as_str())?;
-        tx.put(&f, "deleted", false)?;
+        schema::write_folder(&mut tx, &f, title, &now, &now)?;
         let parent = tx
             .get(&folders, parent_folder_id)?
             .with_context(|| format!("parent folder not found: {parent_folder_id}"))?
             .1;
         let ch = tx
-            .get(&parent, "children")?
+            .get(&parent, schema::CHILDREN)?
             .context("parent missing children")?
             .1;
         tx.insert(&ch, tx.length(&ch), id.as_str())?;
@@ -125,7 +126,6 @@ pub fn update_bookmark(
     title: Option<&str>,
     notes: Option<&str>,
 ) -> anyhow::Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let bookmarks = tx
@@ -136,16 +136,7 @@ pub fn update_bookmark(
             .get(&bookmarks, bookmark_id)?
             .with_context(|| format!("bookmark not found: {bookmark_id}"))?
             .1;
-        if let Some(url) = url {
-            tx.put(&bm, "url", url)?;
-        }
-        if let Some(title) = title {
-            tx.put(&bm, "title", title)?;
-        }
-        if let Some(notes) = notes {
-            tx.put(&bm, "notes", notes)?;
-        }
-        tx.put(&bm, "updated_at", now.as_str())?;
+        schema::patch_bookmark(&mut tx, &bm, url, title, notes, None)?;
         tx.commit_with(commit_opts(format!("update_bookmark:{bookmark_id}")));
         Ok(())
     })
@@ -165,8 +156,8 @@ pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> anyhow::Res
             .get(&bookmarks, bookmark_id)?
             .with_context(|| format!("bookmark not found: {bookmark_id}"))?
             .1;
-        tx.put(&bm, "deleted", true)?;
-        tx.put(&bm, "updated_at", now.as_str())?;
+        tx.put(&bm, schema::DELETED, true)?;
+        tx.put(&bm, schema::UPDATED_AT, now.as_str())?;
 
         let folders = tx
             .get(automerge::ROOT, "folders")?
@@ -179,7 +170,7 @@ pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> anyhow::Res
                 .with_context(|| format!("folder not found: {folder_key}"))?
                 .1;
             let children = tx
-                .get(&folder_obj, "children")?
+                .get(&folder_obj, schema::CHILDREN)?
                 .context("folder missing children")?
                 .1;
             let len = tx.length(&children);
@@ -214,11 +205,11 @@ fn mark_descendants_deleted(
         let Some((_, folder)) = tx.get(folders, fid.as_str())? else {
             continue;
         };
-        tx.put(&folder, "deleted", true)?;
-        tx.put(&folder, "updated_at", now)?;
+        tx.put(&folder, schema::DELETED, true)?;
+        tx.put(&folder, schema::UPDATED_AT, now)?;
 
         let children = tx
-            .get(&folder, "children")?
+            .get(&folder, schema::CHILDREN)?
             .context("folder missing children")?
             .1;
         let len = tx.length(&children);
@@ -231,8 +222,8 @@ fn mark_descendants_deleted(
                 if tx.get(folders, child_id.as_str())?.is_some() {
                     stack.push(child_id);
                 } else if let Some((_, bm_obj)) = tx.get(bookmarks, child_id.as_str())? {
-                    tx.put(&bm_obj, "deleted", true)?;
-                    tx.put(&bm_obj, "updated_at", now)?;
+                    tx.put(&bm_obj, schema::DELETED, true)?;
+                    tx.put(&bm_obj, schema::UPDATED_AT, now)?;
                 }
             }
         }
@@ -264,7 +255,7 @@ pub fn delete_folder(doc_handle: &DocHandle, folder_id: &str) -> anyhow::Result<
                 .with_context(|| format!("folder not found: {key}"))?
                 .1;
             let children = tx
-                .get(&f, "children")?
+                .get(&f, schema::CHILDREN)?
                 .context("folder missing children")?
                 .1;
             let len = tx.length(&children);
@@ -288,7 +279,6 @@ pub fn rename_folder(
     folder_id: &str,
     new_title: &str,
 ) -> anyhow::Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let folders = tx
@@ -299,8 +289,7 @@ pub fn rename_folder(
             .get(&folders, folder_id)?
             .with_context(|| format!("folder not found: {folder_id}"))?
             .1;
-        tx.put(&folder, "title", new_title)?;
-        tx.put(&folder, "updated_at", now.as_str())?;
+        schema::patch_folder(&mut tx, &folder, new_title)?;
         tx.commit_with(commit_opts(format!("rename_folder:{folder_id}")));
         Ok(())
     })
@@ -339,7 +328,7 @@ pub fn move_item(
             .with_context(|| format!("source folder not found: {from_folder_id}"))?
             .1;
         let from_children = tx
-            .get(&from_folder, "children")?
+            .get(&from_folder, schema::CHILDREN)?
             .context("source folder missing children")?
             .1;
         let from_len = tx.length(&from_children);
@@ -357,7 +346,7 @@ pub fn move_item(
             .with_context(|| format!("destination folder not found: {to_folder_id}"))?
             .1;
         let to_children = tx
-            .get(&to_folder, "children")?
+            .get(&to_folder, schema::CHILDREN)?
             .context("destination folder missing children")?
             .1;
         let to_len = tx.length(&to_children);
@@ -383,7 +372,7 @@ fn is_descendant_in_tx(
         let Some((_, folder)) = tx.get(folders, fid.as_str()).ok().flatten() else {
             continue;
         };
-        let Some((_, children)) = tx.get(&folder, "children").ok().flatten() else {
+        let Some((_, children)) = tx.get(&folder, schema::CHILDREN).ok().flatten() else {
             continue;
         };
         let len = tx.length(&children);
@@ -417,7 +406,7 @@ fn insert_items_recursive(
         .with_context(|| format!("folder not found: {parent_id}"))?
         .1;
     let children = tx
-        .get(&parent, "children")?
+        .get(&parent, schema::CHILDREN)?
         .context("folder missing children")?
         .1;
 
@@ -433,21 +422,18 @@ fn insert_items_recursive(
                 let id = uuid::Uuid::new_v4().to_string();
                 let now = chrono::Utc::now().to_rfc3339();
                 let bm = tx.put_object(bookmarks_map, id.as_str(), ObjType::Map)?;
-                tx.put(&bm, "url", url.as_str())?;
-                tx.put(&bm, "title", title.as_str())?;
-                tx.put(&bm, "notes", notes.as_str())?;
-                tx.put(&bm, "favicon", "")?;
-                tx.put(
+                schema::write_bookmark(
+                    tx,
                     &bm,
-                    "created_at",
-                    created_at.as_deref().unwrap_or(now.as_str()),
+                    &schema::BookmarkFields {
+                        url,
+                        title,
+                        notes,
+                        favicon: "",
+                        created_at: created_at.as_deref().unwrap_or(&now),
+                        updated_at: updated_at.as_deref().unwrap_or(&now),
+                    },
                 )?;
-                tx.put(
-                    &bm,
-                    "updated_at",
-                    updated_at.as_deref().unwrap_or(now.as_str()),
-                )?;
-                tx.put(&bm, "deleted", false)?;
                 let len = tx.length(&children);
                 tx.insert(&children, len, id.as_str())?;
                 *bc += 1;
@@ -461,19 +447,13 @@ fn insert_items_recursive(
                 let id = uuid::Uuid::new_v4().to_string();
                 let now = chrono::Utc::now().to_rfc3339();
                 let f = tx.put_object(folders, id.as_str(), ObjType::Map)?;
-                tx.put(&f, "title", title.as_str())?;
-                tx.put_object(&f, "children", ObjType::List)?;
-                tx.put(
+                schema::write_folder(
+                    tx,
                     &f,
-                    "created_at",
-                    created_at.as_deref().unwrap_or(now.as_str()),
+                    title,
+                    created_at.as_deref().unwrap_or(&now),
+                    updated_at.as_deref().unwrap_or(&now),
                 )?;
-                tx.put(
-                    &f,
-                    "updated_at",
-                    updated_at.as_deref().unwrap_or(now.as_str()),
-                )?;
-                tx.put(&f, "deleted", false)?;
                 let len = tx.length(&children);
                 tx.insert(&children, len, id.as_str())?;
                 *fc += 1;
@@ -539,7 +519,6 @@ pub fn revert_bookmark(
     bookmark_id: &str,
     target_hash: &automerge::ChangeHash,
 ) -> anyhow::Result<()> {
-    let now = chrono::Utc::now().to_rfc3339();
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let target_heads = &[*target_hash];
 
@@ -553,28 +532,31 @@ pub fn revert_bookmark(
             .1;
 
         let old_url = doc
-            .get_at(&bm_obj, "url", target_heads)?
+            .get_at(&bm_obj, schema::URL, target_heads)?
             .map(|(v, _)| v.into_string().unwrap_or_default())
             .unwrap_or_default();
         let old_title = doc
-            .get_at(&bm_obj, "title", target_heads)?
+            .get_at(&bm_obj, schema::TITLE, target_heads)?
             .map(|(v, _)| v.into_string().unwrap_or_default())
             .unwrap_or_default();
         let old_notes = doc
-            .get_at(&bm_obj, "notes", target_heads)?
+            .get_at(&bm_obj, schema::NOTES, target_heads)?
             .map(|(v, _)| v.into_string().unwrap_or_default())
             .unwrap_or_default();
         let old_favicon = doc
-            .get_at(&bm_obj, "favicon", target_heads)?
+            .get_at(&bm_obj, schema::FAVICON, target_heads)?
             .map(|(v, _)| v.into_string().unwrap_or_default())
             .unwrap_or_default();
 
         let mut tx = doc.transaction();
-        tx.put(&bm_obj, "url", old_url.as_str())?;
-        tx.put(&bm_obj, "title", old_title.as_str())?;
-        tx.put(&bm_obj, "notes", old_notes.as_str())?;
-        tx.put(&bm_obj, "favicon", old_favicon.as_str())?;
-        tx.put(&bm_obj, "updated_at", now.as_str())?;
+        schema::patch_bookmark(
+            &mut tx,
+            &bm_obj,
+            Some(&old_url),
+            Some(&old_title),
+            Some(&old_notes),
+            Some(&old_favicon),
+        )?;
         let short_hash = &format!("{target_hash}")[..8];
         tx.commit_with(commit_opts(format!(
             "revert_bookmark:{bookmark_id}:{short_hash}"

@@ -4,7 +4,7 @@ use automerge_repo::tokio::FsStorage;
 use automerge_repo::{DocHandle, Repo};
 use axum::Router;
 use axum::routing::{delete, get, post, put};
-use mybriefcase_bookmarks::api;
+use mybriefcase_bookmarks::{api, state};
 use std::sync::Arc;
 use tempfile::TempDir;
 
@@ -91,7 +91,7 @@ pub fn build_app(
     client_id: String,
 ) -> Router {
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
-    let state = Arc::new(api::AppState {
+    let state = Arc::new(state::AppState {
         doc_handle,
         sync_root,
         client_id,

@@ -1,4 +1,4 @@
-use mybriefcase_bookmarks::{api, identity, repo, views, watcher};
+use mybriefcase_bookmarks::{api, identity, repo, state, views, watcher};
 
 use axum::Router;
 use axum::routing::{get, post, put};
@@ -63,7 +63,7 @@ fn write_peer_info(sync_root: &std::path::Path, client_id: &str) {
     std::fs::write(&info_path, info.to_string()).unwrap();
 }
 
-fn build_router(state: Arc<api::AppState>) -> Router {
+fn build_router(state: Arc<state::AppState>) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/", get(views::index_page))
@@ -118,7 +118,7 @@ fn build_router(state: Arc<api::AppState>) -> Router {
         .layer(CatchPanicLayer::new())
 }
 
-fn spawn_watcher(state: &Arc<api::AppState>) {
+fn spawn_watcher(state: &Arc<state::AppState>) {
     let mut watcher_rx = watcher::start_file_watcher(&state.sync_root, &state.client_id);
     let watcher_state = Arc::clone(state);
     tokio::spawn(async move {
@@ -136,7 +136,7 @@ fn spawn_watcher(state: &Arc<api::AppState>) {
     });
 }
 
-fn spawn_poller(state: &Arc<api::AppState>) {
+fn spawn_poller(state: &Arc<state::AppState>) {
     let st = Arc::clone(state);
     tokio::spawn(async move {
         let mut poll = watcher::PollState::new(&st.sync_root, &st.client_id);
@@ -184,7 +184,7 @@ async fn main() {
 
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
     let static_version = compute_static_version();
-    let state = Arc::new(api::AppState {
+    let state = Arc::new(state::AppState {
         doc_handle,
         sync_root: cfg.sync_root,
         client_id,
