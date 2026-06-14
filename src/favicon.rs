@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use url::Url;
 
 const MAX_FAVICON_SIZE: usize = 256 * 1024;
-const USER_AGENT: &str = "MyBriefcase/1.0 (favicon fetcher)";
+const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 fn is_valid_image(data: &[u8]) -> bool {
     if infer::get(data).is_some_and(|t| t.matcher_type() == infer::MatcherType::Image) {
