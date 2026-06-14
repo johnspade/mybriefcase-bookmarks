@@ -1,6 +1,7 @@
 pub mod api;
 pub mod export;
 pub mod favicon;
+pub mod handlers;
 pub mod history;
 pub mod identity;
 pub mod import;

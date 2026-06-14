@@ -13,8 +13,8 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 use common::new_initialized_doc;
-use mybriefcase_bookmarks::{ops, state, views};
-use views::SortOrder;
+use mybriefcase_bookmarks::views::SortOrder;
+use mybriefcase_bookmarks::{handlers, ops, state};
 
 fn build_views_app() -> (Router, String) {
     let td = new_initialized_doc("test-views");
@@ -29,17 +29,20 @@ fn build_views_app() -> (Router, String) {
         static_version: "test".to_string(),
     });
     let app = Router::new()
-        .route("/folders/{id}/content", get(views::folder_content))
-        .route("/folders/{id}/rename", post(views::rename_folder_html))
-        .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
-        .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
-        .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
-        .route("/bookmarks/new", post(views::create_bookmark_html))
-        .route("/settings", get(views::settings_page))
-        .route("/folder-options", get(views::folder_options))
-        .route("/import", post(views::import_bookmarks_html))
-        .route("/items/move", post(views::move_item_html))
-        .route("/move-picker/{id}", get(views::move_picker_html))
+        .route("/folders/{id}/content", get(handlers::folder_content))
+        .route("/folders/{id}/rename", post(handlers::rename_folder_html))
+        .route("/bookmarks/{id}/detail", get(handlers::bookmark_detail))
+        .route(
+            "/bookmarks/{id}/edit-form",
+            get(handlers::bookmark_edit_form),
+        )
+        .route("/bookmarks/{id}/edit", post(handlers::update_bookmark_html))
+        .route("/bookmarks/new", post(handlers::create_bookmark_html))
+        .route("/settings", get(handlers::settings_page))
+        .route("/folder-options", get(handlers::folder_options))
+        .route("/import", post(handlers::import_bookmarks_html))
+        .route("/items/move", post(handlers::move_item_html))
+        .route("/move-picker/{id}", get(handlers::move_picker_html))
         .with_state(state);
     std::mem::forget(td.temp_dir);
     std::mem::forget(sync_root);
@@ -60,17 +63,20 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
         static_version: "test".to_string(),
     });
     let app = Router::new()
-        .route("/folders/{id}/content", get(views::folder_content))
-        .route("/folders/{id}/rename", post(views::rename_folder_html))
-        .route("/bookmarks/{id}/detail", get(views::bookmark_detail))
-        .route("/bookmarks/{id}/edit-form", get(views::bookmark_edit_form))
-        .route("/bookmarks/{id}/edit", post(views::update_bookmark_html))
-        .route("/bookmarks/new", post(views::create_bookmark_html))
-        .route("/settings", get(views::settings_page))
-        .route("/folder-options", get(views::folder_options))
-        .route("/import", post(views::import_bookmarks_html))
-        .route("/items/move", post(views::move_item_html))
-        .route("/move-picker/{id}", get(views::move_picker_html))
+        .route("/folders/{id}/content", get(handlers::folder_content))
+        .route("/folders/{id}/rename", post(handlers::rename_folder_html))
+        .route("/bookmarks/{id}/detail", get(handlers::bookmark_detail))
+        .route(
+            "/bookmarks/{id}/edit-form",
+            get(handlers::bookmark_edit_form),
+        )
+        .route("/bookmarks/{id}/edit", post(handlers::update_bookmark_html))
+        .route("/bookmarks/new", post(handlers::create_bookmark_html))
+        .route("/settings", get(handlers::settings_page))
+        .route("/folder-options", get(handlers::folder_options))
+        .route("/import", post(handlers::import_bookmarks_html))
+        .route("/items/move", post(handlers::move_item_html))
+        .route("/move-picker/{id}", get(handlers::move_picker_html))
         .with_state(state);
     std::mem::forget(td.temp_dir);
     std::mem::forget(sync_root);
