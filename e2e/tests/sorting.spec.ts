@@ -6,6 +6,7 @@ test.describe('Sorting bookmarks', () => {
     await page.locator('.fab-menu-item', { hasText: 'New Bookmark' }).click();
     const modal = page.locator('.modal-overlay').first();
     await expect(modal).toBeVisible();
+    await expect(modal.locator('input[name="title"]')).toBeFocused();
     await modal.locator('input[name="title"]').fill(title);
     await modal.locator('input[name="url"]').fill(url);
     await modal.locator('button[type="submit"]').click();

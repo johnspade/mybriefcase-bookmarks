@@ -9,8 +9,8 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::{get, post};
 use http_body_util::BodyExt;
+use mybriefcase_bookmarks::handlers;
 use mybriefcase_bookmarks::ops;
-use mybriefcase_bookmarks::views;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -31,13 +31,16 @@ fn build_html_app(
     });
 
     Router::new()
-        .route("/", get(views::index_page))
-        .route("/folders/{id}", get(views::dispatch_get_folder))
-        .route("/folders/new", post(views::create_folder_html))
-        .route("/bookmarks/new", post(views::create_bookmark_html))
-        .route("/bookmarks/{id}/remove", post(views::delete_bookmark_html))
-        .route("/folders/{id}/remove", post(views::delete_folder_html))
-        .route("/folders/{id}/rename", post(views::rename_folder_html))
+        .route("/", get(handlers::index_page))
+        .route("/folders/{id}", get(handlers::dispatch_get_folder))
+        .route("/folders/new", post(handlers::create_folder_html))
+        .route("/bookmarks/new", post(handlers::create_bookmark_html))
+        .route(
+            "/bookmarks/{id}/remove",
+            post(handlers::delete_bookmark_html),
+        )
+        .route("/folders/{id}/remove", post(handlers::delete_folder_html))
+        .route("/folders/{id}/rename", post(handlers::rename_folder_html))
         .with_state(state)
 }
 

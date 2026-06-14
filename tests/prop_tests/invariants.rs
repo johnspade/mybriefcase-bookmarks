@@ -64,6 +64,23 @@ fn assert_no_cycles(store: &BookmarkStore, folder_id: &str, path: &mut HashSet<S
     path.remove(folder_id);
 }
 
+pub fn assert_structural_integrity(store: &BookmarkStore) {
+    // All children refs point to existing bookmark or folder IDs.
+    // This invariant always holds: ops never insert references to
+    // IDs that don't exist in the document.
+    for (folder_id, folder) in &store.folders {
+        if folder.deleted {
+            continue;
+        }
+        for child_id in &folder.children {
+            assert!(
+                store.bookmarks.contains_key(child_id) || store.folders.contains_key(child_id),
+                "folder {folder_id} has orphaned child ref: {child_id}"
+            );
+        }
+    }
+}
+
 pub fn assert_cascade_complete(store: &BookmarkStore, deleted_folder_id: &str) {
     let folder = store
         .folders

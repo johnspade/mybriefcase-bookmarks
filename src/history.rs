@@ -183,14 +183,14 @@ pub fn bookmark_current(doc_handle: &DocHandle, bookmark_id: &str) -> Option<Boo
 /// Parses a hex-encoded change hash string into a `ChangeHash`.
 #[must_use]
 pub fn parse_change_hash(hex: &str) -> Option<ChangeHash> {
+    if hex.len() != 64 {
+        return None;
+    }
     let bytes: Vec<u8> = (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&hex[i..i + 2], 16))
         .collect::<Result<Vec<_>, _>>()
         .ok()?;
-    if bytes.len() != 32 {
-        return None;
-    }
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&bytes);
     Some(ChangeHash(arr))
@@ -348,5 +348,86 @@ mod tests {
         for entry in &history {
             assert!(entry.message.as_ref().unwrap().contains(&bm1));
         }
+    }
+
+    #[test]
+    fn test_compute_field_changes_no_changes() {
+        let snapshot = BookmarkSnapshot {
+            url: "https://x.com".to_string(),
+            title: "X".to_string(),
+            notes: "n".to_string(),
+            created_at: "2026-01-01".to_string(),
+            updated_at: "2026-01-01".to_string(),
+        };
+        let changes = compute_field_changes(Some(&snapshot), &snapshot);
+        assert!(changes.is_empty());
+    }
+
+    #[test]
+    fn test_compute_field_changes_all_fields() {
+        let before = BookmarkSnapshot {
+            url: "https://old.com".to_string(),
+            title: "Old".to_string(),
+            notes: "old notes".to_string(),
+            created_at: "2026-01-01".to_string(),
+            updated_at: "2026-01-01".to_string(),
+        };
+        let after = BookmarkSnapshot {
+            url: "https://new.com".to_string(),
+            title: "New".to_string(),
+            notes: "new notes".to_string(),
+            created_at: "2026-01-01".to_string(),
+            updated_at: "2026-01-02".to_string(),
+        };
+        let changes = compute_field_changes(Some(&before), &after);
+        assert_eq!(changes.len(), 3);
+        assert!(changes.iter().any(|c| c.field == "title"));
+        assert!(changes.iter().any(|c| c.field == "url"));
+        assert!(changes.iter().any(|c| c.field == "notes"));
+    }
+
+    #[test]
+    fn test_compute_field_changes_none_before() {
+        let after = BookmarkSnapshot {
+            url: "https://x.com".to_string(),
+            title: "X".to_string(),
+            notes: String::new(),
+            created_at: "2026-01-01".to_string(),
+            updated_at: "2026-01-01".to_string(),
+        };
+        let changes = compute_field_changes(None, &after);
+        assert_eq!(changes.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_change_hash_empty_string() {
+        assert!(parse_change_hash("").is_none());
+    }
+
+    #[test]
+    fn test_parse_change_hash_odd_length() {
+        assert!(parse_change_hash("abc").is_none());
+    }
+
+    #[test]
+    fn test_parse_change_hash_non_hex() {
+        let non_hex = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+        assert!(parse_change_hash(non_hex).is_none());
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_history_truncates_at_max() {
+        let (doc, _tmp, root_id) = setup_repo();
+        let bm_id = ops::add_bookmark(&doc, &root_id, "https://x.com", "X").unwrap();
+        for i in 0..55 {
+            ops::update_bookmark(&doc, &bm_id, None, Some(&format!("Title {i}")), None).unwrap();
+        }
+        let history = bookmark_history(&doc, &bm_id);
+        assert!(
+            history.len() <= MAX_HISTORY_ENTRIES,
+            "history should be capped at {MAX_HISTORY_ENTRIES}, got {}",
+            history.len()
+        );
     }
 }

@@ -772,4 +772,89 @@ mod tests {
         assert_eq!(bm.favicon, "abc123.png");
         assert_ne!(bm.updated_at, original_updated);
     }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_move_item_into_self_errors() {
+        let (doc, _tmp) = setup_repo();
+        let store = read_store(&doc);
+        let root_id = store.root_folder_id;
+        let folder = create_folder(&doc, &root_id, "F").unwrap();
+        let result = move_item(&doc, &folder, &root_id, &folder);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("into itself"),
+            "should reject moving folder into itself"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_move_item_into_descendant_errors() {
+        let (doc, _tmp) = setup_repo();
+        let store = read_store(&doc);
+        let root_id = store.root_folder_id;
+        let parent = create_folder(&doc, &root_id, "Parent").unwrap();
+        let child = create_folder(&doc, &parent, "Child").unwrap();
+        let grandchild = create_folder(&doc, &child, "Grandchild").unwrap();
+        let result = move_item(&doc, &parent, &root_id, &grandchild);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("own subtree"),
+            "should reject moving folder into its own subtree"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_move_item_same_source_dest_is_noop() {
+        let (doc, _tmp) = setup_repo();
+        let store = read_store(&doc);
+        let root_id = store.root_folder_id;
+        let bm_id = add_bookmark(&doc, &root_id, "https://x.com", "X").unwrap();
+        let result = move_item(&doc, &bm_id, &root_id, &root_id);
+        assert!(result.is_ok());
+        let store = read_store(&doc);
+        let root = store.folders.get(&root_id).unwrap();
+        assert!(root.children.contains(&bm_id));
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_add_bookmark_to_nonexistent_folder_errors() {
+        let (doc, _tmp) = setup_repo();
+        let result = add_bookmark(&doc, "nonexistent-id", "https://x.com", "X");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_update_nonexistent_bookmark_errors() {
+        let (doc, _tmp) = setup_repo();
+        let result = update_bookmark(&doc, "nonexistent-id", Some("https://x.com"), None, None);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_delete_nonexistent_bookmark_errors() {
+        let (doc, _tmp) = setup_repo();
+        let result = delete_bookmark(&doc, "nonexistent-id");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_import_into_nonexistent_folder_errors() {
+        let (doc, _tmp) = setup_repo();
+        let items = vec![crate::import::ImportedItem::Bookmark {
+            url: "https://x.com".to_string(),
+            title: "X".to_string(),
+            notes: String::new(),
+            created_at: None,
+            updated_at: None,
+        }];
+        let result = import_items(&doc, "nonexistent-id", &items);
+        assert!(result.is_err());
+    }
 }
