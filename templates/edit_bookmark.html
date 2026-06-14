@@ -1,6 +1,6 @@
 <h2>Edit Bookmark</h2>
 <form hx-post="/bookmarks/{{ id }}/edit" hx-target="#detail-body" hx-swap="innerHTML"
-      @htmx:after-request="$store.app.showEditModal = false"
+      @htmx:after-request="if ($event.detail.pathInfo.requestPath === '/bookmarks/{{ id }}/edit') $store.app.showEditModal = false"
       x-init="htmx.process($el); $nextTick(() => $refs.editTitle.focus())">
   <div class="detail-field">
     <label>Name</label>
