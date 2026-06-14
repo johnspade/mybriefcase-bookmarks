@@ -12,7 +12,11 @@ Use `!` after the type for breaking changes: `feat!: remove legacy endpoint`.
 
 ## Before Committing
 
-Run `just validate` before committing. All checks must pass — CI will reject the PR otherwise.
+Run `nix run .#validate` before committing. All checks must pass — CI will reject the PR otherwise. This runs the same checks as CI: fmt, clippy, test, deny, audit, doc, lint-frontend, miri, and E2E tests.
+
+For a full validation including the Docker build: `nix run .#validate-all`.
+
+Individual checks can also be run separately — see the table in [README.md](README.md#validation).
 
 Never force-push to `main`. If a commit needs fixing, create a new commit instead of amending.
 

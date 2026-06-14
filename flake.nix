@@ -56,6 +56,7 @@
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           bin = craneLib.buildPackage (commonArgs // {
             inherit cargoArtifacts;
+            doCheck = false;
           });
         in
         { default = bin; }
@@ -165,6 +166,87 @@
         checks = nixpkgs.lib.getAttrs [ "x86_64-linux" ] self.checks;
       };
 
+      apps = forEachSupportedSystem ({ pkgs, ... }:
+        let
+          nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
+            toolchain.default.override {
+              extensions = [ "miri" "rust-src" ];
+            }
+          );
+        in {
+        miri = {
+          type = "app";
+          program = toString (pkgs.writeShellScript "miri" ''
+            set -euo pipefail
+            export PATH="${nightlyToolchain}/bin:$PATH"
+            cargo miri test
+          '');
+        };
+
+        e2e = {
+          type = "app";
+          program = toString (pkgs.writeShellScript "e2e" ''
+            set -euo pipefail
+            nix build .#default
+            cd e2e
+            npm ci --silent
+            npx playwright install --with-deps chromium
+            MBB_BINARY="$(cd .. && pwd)/result/bin/mybriefcase-bookmarks" npx playwright test
+          '');
+        };
+
+        docker-test = {
+          type = "app";
+          program = toString (pkgs.writeShellScript "docker-test" ''
+            set -euo pipefail
+            DOCKER_ARCH=$(docker info --format '{{.Architecture}}')
+            if [ "$DOCKER_ARCH" = "aarch64" ]; then
+              DOCKER_SYSTEM="aarch64-linux"
+            else
+              DOCKER_SYSTEM="x86_64-linux"
+            fi
+            echo "Building Docker image ($DOCKER_SYSTEM)..."
+            nix build ".#packages.$DOCKER_SYSTEM.docker"
+            echo "Running smoke test..."
+            docker load < result
+            docker run -d --name smoke-test -p 3000:3000 mybriefcase-bookmarks:latest
+            timeout 30 sh -c 'until curl -sf http://localhost:3000/ | grep -q "MyBriefcase Bookmarks"; do sleep 1; done'
+            docker stop smoke-test && docker rm smoke-test
+            echo "Docker smoke test passed!"
+          '');
+        };
+
+        validate = {
+          type = "app";
+          program = toString (pkgs.writeShellScript "validate" ''
+            set -euo pipefail
+            echo "==> Running Nix flake checks..."
+            nix flake check --keep-going
+            echo "==> Running Miri..."
+            nix run .#miri
+            echo "==> Running E2E tests..."
+            nix run .#e2e
+            echo "==> All validations passed!"
+          '');
+        };
+
+        validate-all = {
+          type = "app";
+          program = toString (pkgs.writeShellScript "validate-all" ''
+            set -euo pipefail
+            echo "==> Running Nix flake checks..."
+            nix flake check --keep-going
+            echo "==> Running Miri..."
+            nix run .#miri
+            echo "==> Running E2E tests..."
+            nix run .#e2e
+            echo "==> Running Docker build + smoke test..."
+            nix run .#docker-test
+            echo "==> All validations passed!"
+          '');
+        };
+      });
+
       devShells = forEachSupportedSystem ({ pkgs, ... }: {
         default = pkgs.mkShell {
           packages = with pkgs; [
@@ -175,7 +257,6 @@
             cargo-deny
             cargo-edit
             cargo-watch
-            just
             rust-analyzer
             nodejs_22
           ];
