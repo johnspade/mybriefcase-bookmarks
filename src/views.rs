@@ -1417,6 +1417,51 @@ pub async fn serve_favicon(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    fn make_store(
+        root_id: &str,
+        folders: Vec<(&str, &str, Vec<&str>)>,
+        bookmarks: Vec<(&str, &str, &str, &str)>,
+    ) -> BookmarkStore {
+        let mut folder_map = HashMap::new();
+        for (id, title, children) in folders {
+            folder_map.insert(
+                id.to_string(),
+                crate::model::Folder {
+                    title: title.to_string(),
+                    children: children.into_iter().map(String::from).collect(),
+                    created_at: "2026-01-01T00:00:00Z".to_string(),
+                    updated_at: "2026-01-01T00:00:00Z".to_string(),
+                    deleted: false,
+                },
+            );
+        }
+        let mut bookmark_map = HashMap::new();
+        for (id, title, url, created) in bookmarks {
+            bookmark_map.insert(
+                id.to_string(),
+                crate::model::Bookmark {
+                    url: url.to_string(),
+                    title: title.to_string(),
+                    notes: String::new(),
+                    favicon: String::new(),
+                    created_at: created.to_string(),
+                    updated_at: created.to_string(),
+                    deleted: false,
+                },
+            );
+        }
+        BookmarkStore {
+            root_folder_id: root_id.to_string(),
+            folders: folder_map,
+            bookmarks: bookmark_map,
+            meta: crate::model::StoreMeta {
+                schema_version: 1,
+                collection_name: "bookmarks".to_string(),
+            },
+        }
+    }
 
     #[test]
     fn date_short_extracts_date_portion() {
@@ -1436,9 +1481,165 @@ mod tests {
     }
 
     #[test]
+    fn domain_color_differs_for_different_urls() {
+        let c1 = domain_color("https://example.com");
+        let c2 = domain_color("https://other.org");
+        // They might collide, but for these specific inputs they don't
+        assert_ne!(c1, c2);
+    }
+
+    #[test]
     fn domain_letter_extracts_first_char() {
         assert_eq!(domain_letter("https://example.com/page"), "E");
         assert_eq!(domain_letter("https://www.github.com"), "G");
         assert_eq!(domain_letter("http://rust-lang.org"), "R");
+    }
+
+    #[test]
+    fn domain_letter_handles_empty_url() {
+        assert_eq!(domain_letter(""), "?");
+    }
+
+    #[test]
+    fn build_breadcrumbs_single_root() {
+        let store = make_store("root", vec![("root", "Bookmarks", vec![])], vec![]);
+        let crumbs = build_breadcrumbs(&store, "root");
+        assert_eq!(crumbs.len(), 1);
+        assert_eq!(crumbs[0].title, "Bookmarks");
+        assert!(crumbs[0].is_last);
+    }
+
+    #[test]
+    fn build_breadcrumbs_nested_path() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Bookmarks", vec!["work"]),
+                ("work", "Work", vec!["rust"]),
+                ("rust", "Rust", vec![]),
+            ],
+            vec![],
+        );
+        let crumbs = build_breadcrumbs(&store, "rust");
+        assert_eq!(crumbs.len(), 3);
+        assert_eq!(crumbs[0].title, "Bookmarks");
+        assert_eq!(crumbs[1].title, "Work");
+        assert_eq!(crumbs[2].title, "Rust");
+        assert!(!crumbs[0].is_last);
+        assert!(crumbs[2].is_last);
+    }
+
+    #[test]
+    fn build_folder_items_sorts_by_name_asc() {
+        let store = make_store(
+            "root",
+            vec![("root", "Bookmarks", vec!["bm-z", "bm-a", "bm-m"])],
+            vec![
+                ("bm-z", "Zebra", "https://z.com", "2026-01-03"),
+                ("bm-a", "Apple", "https://a.com", "2026-01-01"),
+                ("bm-m", "Mango", "https://m.com", "2026-01-02"),
+            ],
+        );
+        let (_, bookmarks) = build_folder_items(&store, "root", SortOrder::NameAsc);
+        let titles: Vec<&str> = bookmarks.iter().map(|b| b.title.as_str()).collect();
+        assert_eq!(titles, vec!["Apple", "Mango", "Zebra"]);
+    }
+
+    #[test]
+    fn build_folder_items_sorts_by_name_desc() {
+        let store = make_store(
+            "root",
+            vec![("root", "Bookmarks", vec!["bm-z", "bm-a", "bm-m"])],
+            vec![
+                ("bm-z", "Zebra", "https://z.com", "2026-01-03"),
+                ("bm-a", "Apple", "https://a.com", "2026-01-01"),
+                ("bm-m", "Mango", "https://m.com", "2026-01-02"),
+            ],
+        );
+        let (_, bookmarks) = build_folder_items(&store, "root", SortOrder::NameDesc);
+        let titles: Vec<&str> = bookmarks.iter().map(|b| b.title.as_str()).collect();
+        assert_eq!(titles, vec!["Zebra", "Mango", "Apple"]);
+    }
+
+    #[test]
+    fn build_folder_items_sorts_by_date_desc() {
+        let store = make_store(
+            "root",
+            vec![("root", "Bookmarks", vec!["bm-z", "bm-a", "bm-m"])],
+            vec![
+                ("bm-z", "Zebra", "https://z.com", "2026-01-03"),
+                ("bm-a", "Apple", "https://a.com", "2026-01-01"),
+                ("bm-m", "Mango", "https://m.com", "2026-01-02"),
+            ],
+        );
+        let (_, bookmarks) = build_folder_items(&store, "root", SortOrder::DateDesc);
+        let titles: Vec<&str> = bookmarks.iter().map(|b| b.title.as_str()).collect();
+        assert_eq!(titles, vec!["Zebra", "Mango", "Apple"]);
+    }
+
+    #[test]
+    fn build_folder_items_sorts_by_date_asc() {
+        let store = make_store(
+            "root",
+            vec![("root", "Bookmarks", vec!["bm-z", "bm-a", "bm-m"])],
+            vec![
+                ("bm-z", "Zebra", "https://z.com", "2026-01-03"),
+                ("bm-a", "Apple", "https://a.com", "2026-01-01"),
+                ("bm-m", "Mango", "https://m.com", "2026-01-02"),
+            ],
+        );
+        let (_, bookmarks) = build_folder_items(&store, "root", SortOrder::DateAsc);
+        let titles: Vec<&str> = bookmarks.iter().map(|b| b.title.as_str()).collect();
+        assert_eq!(titles, vec!["Apple", "Mango", "Zebra"]);
+    }
+
+    #[test]
+    fn build_folder_items_filters_deleted() {
+        let mut store = make_store(
+            "root",
+            vec![("root", "Bookmarks", vec!["bm-a", "bm-b"])],
+            vec![
+                ("bm-a", "Visible", "https://a.com", "2026-01-01"),
+                ("bm-b", "Deleted", "https://b.com", "2026-01-02"),
+            ],
+        );
+        store.bookmarks.get_mut("bm-b").unwrap().deleted = true;
+        let (_, bookmarks) = build_folder_items(&store, "root", SortOrder::NameAsc);
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].title, "Visible");
+    }
+
+    #[test]
+    fn build_folder_items_nonexistent_folder_returns_empty() {
+        let store = make_store("root", vec![("root", "Bookmarks", vec![])], vec![]);
+        let (folders, bookmarks) = build_folder_items(&store, "nonexistent", SortOrder::NameAsc);
+        assert!(folders.is_empty());
+        assert!(bookmarks.is_empty());
+    }
+
+    #[test]
+    fn count_bookmarks_recursive_counts_nested() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Bookmarks", vec!["sub", "bm-1"]),
+                ("sub", "Sub", vec!["bm-2", "bm-3"]),
+            ],
+            vec![
+                ("bm-1", "One", "https://1.com", "2026-01-01"),
+                ("bm-2", "Two", "https://2.com", "2026-01-01"),
+                ("bm-3", "Three", "https://3.com", "2026-01-01"),
+            ],
+        );
+        let root = store.folders.get("root").unwrap();
+        assert_eq!(count_bookmarks_recursive(&store, root), 3);
+    }
+
+    #[test]
+    fn html_escape_handles_all_special_chars() {
+        assert_eq!(
+            html_escape(r#"<a href="x">&</a>"#),
+            "&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;"
+        );
     }
 }
