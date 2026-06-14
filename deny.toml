@@ -8,6 +8,7 @@ feature-depth = 1
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+allow-wildcard-paths = true
 highlight = "simplest-path"
 
 [licenses]

@@ -1,3 +1,22 @@
+[workspace]
+members = [".", "crates/core"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_imports = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+unused_async = "allow"
+module_name_repetitions = "allow"
+multiple_crate_versions = "allow"
+collapsible_if = "allow"
+collapsible_match = "allow"
+
 [package]
 name = "mybriefcase-bookmarks"
 version = "0.0.1"
@@ -22,53 +41,35 @@ path = "src/main.rs"
 anyhow = "1.0.79"
 askama = "0.12"
 askama_axum = "0.4"
-automerge = "0.7"
 automerge_repo = { version = "0.3", features = ["tokio"] }
 autosurgeon = { version = "0.9", features = ["uuid"] }
 axum = { version = "0.8.5", features = ["multipart"] }
+axum-embed = "0.1.0"
 chrono = { version = "0.4", features = ["serde"] }
-scraper = "0.22"
-hostname = "0.4.1"
-notify = "6"
+hex = "0.4"
+infer = "0.19.0"
+mybriefcase-bookmarks-core = { path = "crates/core" }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+rust-embed = { version = "8.11.0", features = ["axum-ex"] }
 schemars = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 tokio = { version = "1.27", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tower-http = { version = "0.6", features = ["catch-panic"] }
-uuid = { version = "1.18.1", features = ["v4"] }
-ego-tree = "0.10"
-rust-embed = { version = "8.11.0", features = ["axum-ex"] }
-axum-embed = "0.1.0"
-sha2 = "0.10"
-hex = "0.4"
-reqwest = { version = "0.12", features = ["json", "stream"] }
-infer = "0.19.0"
 
 [features]
 slow-tests = []
 
-[lints.rust]
-unsafe_code = "forbid"
-unused_imports = "deny"
-unused_must_use = "deny"
-
-[lints.clippy]
-all = { level = "deny", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }
-cargo = { level = "warn", priority = -1 }
-# Axum 0.8 requires async fn signatures for handlers, even when the body has no .await
-unused_async = "allow"
-# Too noisy for practical use
-module_name_repetitions = "allow"
-multiple_crate_versions = "allow"
-collapsible_if = "allow"
-collapsible_match = "allow"
+[lints]
+workspace = true
 
 [dev-dependencies]
+automerge = "0.7"
+futures-util = "0.3"
+http-body-util = "0.1"
+proptest = "1.6"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"
-futures-util = "0.3"
-proptest = "1.6"
+uuid = { version = "1.18.1", features = ["v4"] }

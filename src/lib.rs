@@ -1,14 +1,15 @@
+pub use mybriefcase_bookmarks_core::export;
+pub use mybriefcase_bookmarks_core::history;
+pub use mybriefcase_bookmarks_core::identity;
+pub use mybriefcase_bookmarks_core::import;
+pub use mybriefcase_bookmarks_core::model;
+pub use mybriefcase_bookmarks_core::ops;
+pub use mybriefcase_bookmarks_core::repo;
+pub use mybriefcase_bookmarks_core::schema;
+pub use mybriefcase_bookmarks_core::watcher;
+
 pub mod api;
-pub mod export;
 pub mod favicon;
 pub mod handlers;
-pub mod history;
-pub mod identity;
-pub mod import;
-pub mod model;
-pub mod ops;
-pub mod repo;
-pub mod schema;
 pub mod state;
 pub mod views;
-pub mod watcher;

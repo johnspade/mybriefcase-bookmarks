@@ -147,7 +147,7 @@
 
           coverage = craneLib.cargoLlvmCov (commonArgs // {
             inherit cargoArtifacts;
-            cargoLlvmCovExtraArgs = "--all-features --fail-under-lines 75";
+            cargoLlvmCovExtraArgs = "--workspace --all-features --fail-under-lines 75";
             installPhase = "touch $out";
           });
 
