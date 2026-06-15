@@ -1,5 +1,6 @@
 use automerge::ObjId;
 use automerge::transaction::Transactable;
+use strum_macros::{EnumIter, IntoStaticStr};
 
 // Top-level document (BookmarkStore) fields
 pub const ROOT_FOLDER_ID: &str = "root_folder_id";
@@ -22,6 +23,92 @@ pub const CHILDREN: &str = "children";
 // StoreMeta fields
 pub const SCHEMA_VERSION: &str = "schema_version";
 pub const COLLECTION_NAME: &str = "collection_name";
+
+/// Exhaustive enum of `BookmarkStore` top-level fields.
+/// Used in tests to guarantee compile-time coverage of all fields.
+#[derive(Debug, Clone, Copy, EnumIter, IntoStaticStr)]
+pub enum BookmarkStoreField {
+    #[strum(serialize = "root_folder_id")]
+    RootFolderId,
+    #[strum(serialize = "folders")]
+    Folders,
+    #[strum(serialize = "bookmarks")]
+    Bookmarks,
+    #[strum(serialize = "meta")]
+    Meta,
+}
+
+/// Exhaustive enum of `Bookmark` fields.
+#[derive(Debug, Clone, Copy, EnumIter, IntoStaticStr)]
+pub enum BookmarkField {
+    #[strum(serialize = "url")]
+    Url,
+    #[strum(serialize = "title")]
+    Title,
+    #[strum(serialize = "notes")]
+    Notes,
+    #[strum(serialize = "favicon")]
+    Favicon,
+    #[strum(serialize = "created_at")]
+    CreatedAt,
+    #[strum(serialize = "updated_at")]
+    UpdatedAt,
+    #[strum(serialize = "deleted")]
+    Deleted,
+}
+
+/// Exhaustive enum of `Folder` fields.
+#[derive(Debug, Clone, Copy, EnumIter, IntoStaticStr)]
+pub enum FolderField {
+    #[strum(serialize = "title")]
+    Title,
+    #[strum(serialize = "children")]
+    Children,
+    #[strum(serialize = "created_at")]
+    CreatedAt,
+    #[strum(serialize = "updated_at")]
+    UpdatedAt,
+    #[strum(serialize = "deleted")]
+    Deleted,
+}
+
+/// Exhaustive enum of `StoreMeta` fields.
+#[derive(Debug, Clone, Copy, EnumIter, IntoStaticStr)]
+pub enum StoreMetaField {
+    #[strum(serialize = "schema_version")]
+    SchemaVersion,
+    #[strum(serialize = "collection_name")]
+    CollectionName,
+}
+
+/// Verifies that each enum variant's string matches the corresponding `pub const`.
+/// This prevents the consts and enums from drifting apart.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn enum_variants_match_constants() {
+        let store_fields: Vec<&str> = BookmarkStoreField::iter().map(Into::into).collect();
+        assert_eq!(store_fields, [ROOT_FOLDER_ID, FOLDERS, BOOKMARKS, META]);
+
+        let bookmark_fields: Vec<&str> = BookmarkField::iter().map(Into::into).collect();
+        assert_eq!(
+            bookmark_fields,
+            [URL, TITLE, NOTES, FAVICON, CREATED_AT, UPDATED_AT, DELETED]
+        );
+
+        let folder_fields: Vec<&str> = FolderField::iter().map(Into::into).collect();
+        assert_eq!(
+            folder_fields,
+            [TITLE, CHILDREN, CREATED_AT, UPDATED_AT, DELETED]
+        );
+
+        let meta_fields: Vec<&str> = StoreMetaField::iter().map(Into::into).collect();
+        assert_eq!(meta_fields, [SCHEMA_VERSION, COLLECTION_NAME]);
+    }
+}
 
 pub struct BookmarkFields<'a> {
     pub url: &'a str,

@@ -1,7 +1,10 @@
 use mybriefcase_bookmarks::model::BookmarkStore;
-use mybriefcase_bookmarks::schema;
+use mybriefcase_bookmarks::schema::{
+    BookmarkField, BookmarkStoreField, FolderField, StoreMetaField,
+};
 use schemars::schema_for;
 use std::collections::BTreeSet;
+use strum::IntoEnumIterator;
 
 #[test]
 fn committed_schema_matches_code() {
@@ -27,44 +30,22 @@ fn schema_constants_match_model_fields_bidirectionally() {
     let folder_fields = extract_definition_properties(&root_json, "Folder");
     let store_meta_fields = extract_definition_properties(&root_json, "StoreMeta");
 
-    // Define the constants grouped by the struct they belong to
-    let root_constants: BTreeSet<String> = [
-        schema::ROOT_FOLDER_ID,
-        schema::FOLDERS,
-        schema::BOOKMARKS,
-        schema::META,
-    ]
-    .into_iter()
-    .map(String::from)
-    .collect();
+    // Derive field sets from exhaustive enums — adding a variant without
+    // a matching model field (or vice versa) will fail this test.
+    let root_constants: BTreeSet<String> = BookmarkStoreField::iter()
+        .map(|v| <&str>::from(v).to_string())
+        .collect();
 
-    let bookmark_constants: BTreeSet<String> = [
-        schema::URL,
-        schema::TITLE,
-        schema::NOTES,
-        schema::FAVICON,
-        schema::CREATED_AT,
-        schema::UPDATED_AT,
-        schema::DELETED,
-    ]
-    .into_iter()
-    .map(String::from)
-    .collect();
+    let bookmark_constants: BTreeSet<String> = BookmarkField::iter()
+        .map(|v| <&str>::from(v).to_string())
+        .collect();
 
-    let folder_constants: BTreeSet<String> = [
-        schema::TITLE,
-        schema::CHILDREN,
-        schema::CREATED_AT,
-        schema::UPDATED_AT,
-        schema::DELETED,
-    ]
-    .into_iter()
-    .map(String::from)
-    .collect();
+    let folder_constants: BTreeSet<String> = FolderField::iter()
+        .map(|v| <&str>::from(v).to_string())
+        .collect();
 
-    let store_meta_constants: BTreeSet<String> = [schema::SCHEMA_VERSION, schema::COLLECTION_NAME]
-        .into_iter()
-        .map(String::from)
+    let store_meta_constants: BTreeSet<String> = StoreMetaField::iter()
+        .map(|v| <&str>::from(v).to_string())
         .collect();
 
     // Bidirectional checks
