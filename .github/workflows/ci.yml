@@ -25,6 +25,7 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
         with:
           use-flakehub: false
+          source-url: https://github.com/johnspade/magic-nix-cache/releases/download/v0.1.6-fix172/magic-nix-cache.closure.xz
       - run: nix flake check --keep-going
 
   miri:
@@ -49,6 +50,7 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
         with:
           use-flakehub: false
+          source-url: https://github.com/johnspade/magic-nix-cache/releases/download/v0.1.6-fix172/magic-nix-cache.closure.xz
       - run: nix build .#default
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -87,6 +89,7 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
         with:
           use-flakehub: false
+          source-url: https://github.com/johnspade/magic-nix-cache/releases/download/v0.1.6-fix172/magic-nix-cache.closure.xz
       - run: nix build .#docker
       - name: Smoke test
         run: |
