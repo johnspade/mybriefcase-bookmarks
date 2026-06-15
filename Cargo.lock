@@ -1503,13 +1503,11 @@ dependencies = [
  "axum",
  "axum-embed",
  "chrono",
- "ego-tree",
  "futures-util",
  "hex",
- "hostname",
  "http-body-util",
  "infer",
- "notify",
+ "mybriefcase-bookmarks-core",
  "proptest",
  "reqwest",
  "rust-embed",
@@ -1524,6 +1522,27 @@ dependencies = [
  "tower",
  "tower-http",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "mybriefcase-bookmarks-core"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "automerge",
+ "automerge_repo",
+ "autosurgeon",
+ "chrono",
+ "ego-tree",
+ "hostname",
+ "notify",
+ "schemars",
+ "scraper",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
  "uuid",
 ]
 
