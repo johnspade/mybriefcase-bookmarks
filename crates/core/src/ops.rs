@@ -15,21 +15,41 @@ fn commit_opts(message: String) -> CommitOptions {
         .with_time(now)
 }
 
-#[cfg(test)]
-fn assert_postconditions(doc_handle: &DocHandle) {
-    let store: crate::model::BookmarkStore =
-        doc_handle.with_doc(|doc| autosurgeon::hydrate(doc).unwrap());
-    crate::invariants::assert_valid_tree(&store);
-    crate::invariants::assert_structural_integrity(&store);
+/// Calls `doc_handle.with_doc_mut(f)` and, in test builds, asserts structural
+/// invariants after the mutation succeeds. New ops that use this wrapper get
+/// invariant checking automatically.
+fn with_doc_mut_checked<R>(
+    doc_handle: &DocHandle,
+    f: impl FnOnce(&mut automerge::Automerge) -> anyhow::Result<R>,
+) -> anyhow::Result<R> {
+    let result = doc_handle.with_doc_mut(f)?;
+    #[cfg(test)]
+    {
+        let store: crate::model::BookmarkStore =
+            doc_handle.with_doc(|doc| autosurgeon::hydrate(doc).unwrap());
+        crate::invariants::assert_valid_tree(&store);
+        crate::invariants::assert_structural_integrity(&store);
+    }
+    Ok(result)
 }
 
-#[cfg(test)]
-fn assert_postconditions_with_cascade(doc_handle: &DocHandle, folder_id: &str) {
-    let store: crate::model::BookmarkStore =
-        doc_handle.with_doc(|doc| autosurgeon::hydrate(doc).unwrap());
-    crate::invariants::assert_valid_tree(&store);
-    crate::invariants::assert_structural_integrity(&store);
-    crate::invariants::assert_cascade_complete(&store, folder_id);
+/// Like [`with_doc_mut_checked`] but also asserts cascade-delete completeness
+/// for the given folder.
+fn with_doc_mut_checked_cascade(
+    doc_handle: &DocHandle,
+    _folder_id: &str,
+    f: impl FnOnce(&mut automerge::Automerge) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    doc_handle.with_doc_mut(f)?;
+    #[cfg(test)]
+    {
+        let store: crate::model::BookmarkStore =
+            doc_handle.with_doc(|doc| autosurgeon::hydrate(doc).unwrap());
+        crate::invariants::assert_valid_tree(&store);
+        crate::invariants::assert_structural_integrity(&store);
+        crate::invariants::assert_cascade_complete(&store, _folder_id);
+    }
+    Ok(())
 }
 
 /// # Errors
@@ -42,7 +62,7 @@ pub fn add_bookmark(
 ) -> anyhow::Result<String> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
@@ -78,8 +98,6 @@ pub fn add_bookmark(
         tx.commit_with(commit_opts(format!("add_bookmark:{id}")));
         Ok(())
     })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
     Ok(id)
 }
 
@@ -90,7 +108,7 @@ pub fn update_favicon(
     bookmark_id: &str,
     favicon: &str,
 ) -> anyhow::Result<()> {
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
@@ -103,10 +121,7 @@ pub fn update_favicon(
         schema::patch_bookmark(&mut tx, &bm, None, None, None, Some(favicon))?;
         tx.commit_with(commit_opts(format!("update_favicon:{bookmark_id}")));
         Ok(())
-    })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
-    Ok(())
+    })
 }
 
 /// # Errors
@@ -118,7 +133,7 @@ pub fn create_folder(
 ) -> anyhow::Result<String> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
@@ -138,8 +153,6 @@ pub fn create_folder(
         tx.commit_with(commit_opts(format!("create_folder:{id}")));
         Ok(())
     })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
     Ok(id)
 }
 
@@ -152,7 +165,7 @@ pub fn update_bookmark(
     title: Option<&str>,
     notes: Option<&str>,
 ) -> anyhow::Result<()> {
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
@@ -165,17 +178,14 @@ pub fn update_bookmark(
         schema::patch_bookmark(&mut tx, &bm, url, title, notes, None)?;
         tx.commit_with(commit_opts(format!("update_bookmark:{bookmark_id}")));
         Ok(())
-    })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
-    Ok(())
+    })
 }
 
 /// # Errors
 /// Returns an error if the document schema is invalid or the automerge transaction fails.
 pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> anyhow::Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
@@ -213,10 +223,7 @@ pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> anyhow::Res
         }
         tx.commit_with(commit_opts(format!("delete_bookmark:{bookmark_id}")));
         Ok(())
-    })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
-    Ok(())
+    })
 }
 
 fn mark_descendants_deleted(
@@ -267,7 +274,7 @@ fn mark_descendants_deleted(
 /// Returns an error if the document schema is invalid or the automerge transaction fails.
 pub fn delete_folder(doc_handle: &DocHandle, folder_id: &str) -> anyhow::Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked_cascade(doc_handle, folder_id, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
@@ -301,10 +308,7 @@ pub fn delete_folder(doc_handle: &DocHandle, folder_id: &str) -> anyhow::Result<
         }
         tx.commit_with(commit_opts(format!("delete_folder:{folder_id}")));
         Ok(())
-    })?;
-    #[cfg(test)]
-    assert_postconditions_with_cascade(doc_handle, folder_id);
-    Ok(())
+    })
 }
 
 /// # Errors
@@ -314,7 +318,7 @@ pub fn rename_folder(
     folder_id: &str,
     new_title: &str,
 ) -> anyhow::Result<()> {
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
@@ -327,10 +331,7 @@ pub fn rename_folder(
         schema::patch_folder(&mut tx, &folder, new_title)?;
         tx.commit_with(commit_opts(format!("rename_folder:{folder_id}")));
         Ok(())
-    })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
-    Ok(())
+    })
 }
 
 /// # Errors
@@ -347,7 +348,7 @@ pub fn move_item(
     }
     anyhow::ensure!(item_id != to_folder_id, "cannot move a folder into itself");
 
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
@@ -391,10 +392,7 @@ pub fn move_item(
         tx.insert(&to_children, to_len, item_id)?;
         tx.commit_with(commit_opts(format!("move_item:{item_id}")));
         Ok(())
-    })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
-    Ok(())
+    })
 }
 
 fn is_descendant_in_tx(
@@ -520,7 +518,7 @@ pub fn import_items(
     let mut bookmark_count = 0usize;
     let mut folder_count = 0usize;
 
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
@@ -546,8 +544,6 @@ pub fn import_items(
         )));
         Ok(())
     })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
 
     Ok((bookmark_count, folder_count))
 }
@@ -563,7 +559,7 @@ pub fn revert_bookmark(
     target_hash: &automerge::ChangeHash,
 ) -> anyhow::Result<()> {
     use crate::schema::BookmarkField::{Favicon, Notes, Title, Url};
-    doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
+    with_doc_mut_checked(doc_handle, |doc| {
         let target_heads = &[*target_hash];
 
         let bookmarks_obj = doc
@@ -606,10 +602,7 @@ pub fn revert_bookmark(
             "revert_bookmark:{bookmark_id}:{short_hash}"
         )));
         Ok(())
-    })?;
-    #[cfg(test)]
-    assert_postconditions(doc_handle);
-    Ok(())
+    })
 }
 
 #[cfg(test)]
