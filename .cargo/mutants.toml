@@ -1,0 +1,2 @@
+exclude_globs = ["src/main.rs", "src/bin/*"]
+exclude_re = ["impl Display", "impl Debug"]
