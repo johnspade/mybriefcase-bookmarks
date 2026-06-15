@@ -2,6 +2,8 @@ use automerge::{ChangeHash, ReadDoc};
 use automerge_repo::DocHandle;
 use serde::Serialize;
 
+use crate::schema;
+
 const MAX_HISTORY_ENTRIES: usize = 50;
 
 #[derive(Debug, Clone, Serialize)]
@@ -34,29 +36,29 @@ fn extract_bookmark_fields(
     bookmark_id: &str,
     heads: &[ChangeHash],
 ) -> Option<BookmarkSnapshot> {
-    let bookmarks_obj = doc.get(automerge::ROOT, "bookmarks").ok()??.1;
+    let bookmarks_obj = doc.get(automerge::ROOT, schema::BOOKMARKS).ok()??.1;
     let bm_obj = doc.get(&bookmarks_obj, bookmark_id).ok()??.1;
 
     let url = doc
-        .get_at(&bm_obj, "url", heads)
+        .get_at(&bm_obj, schema::URL, heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())?;
     let title = doc
-        .get_at(&bm_obj, "title", heads)
+        .get_at(&bm_obj, schema::TITLE, heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())?;
     let notes = doc
-        .get_at(&bm_obj, "notes", heads)
+        .get_at(&bm_obj, schema::NOTES, heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())
         .unwrap_or_default();
     let created_at = doc
-        .get_at(&bm_obj, "created_at", heads)
+        .get_at(&bm_obj, schema::CREATED_AT, heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())
         .unwrap_or_default();
     let updated_at = doc
-        .get_at(&bm_obj, "updated_at", heads)
+        .get_at(&bm_obj, schema::UPDATED_AT, heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())
         .unwrap_or_default();
@@ -77,13 +79,17 @@ fn compute_field_changes(
     let mut changes = Vec::new();
     for (name, old_val, new_val) in [
         (
-            "title",
+            schema::TITLE,
             before.map(|s| s.title.as_str()),
             after.title.as_str(),
         ),
-        ("url", before.map(|s| s.url.as_str()), after.url.as_str()),
         (
-            "notes",
+            schema::URL,
+            before.map(|s| s.url.as_str()),
+            after.url.as_str(),
+        ),
+        (
+            schema::NOTES,
             before.map(|s| s.notes.as_str()),
             after.notes.as_str(),
         ),
@@ -216,26 +222,27 @@ mod tests {
         doc_handle.with_doc_mut(|doc| {
             let mut tx = doc.transaction();
             let now = chrono::Utc::now().to_rfc3339();
-            tx.put(automerge::ROOT, "root_folder_id", root_id.as_str())
+            tx.put(automerge::ROOT, schema::ROOT_FOLDER_ID, root_id.as_str())
                 .unwrap();
             let folders = tx
-                .put_object(automerge::ROOT, "folders", ObjType::Map)
+                .put_object(automerge::ROOT, schema::FOLDERS, ObjType::Map)
                 .unwrap();
-            tx.put_object(automerge::ROOT, "bookmarks", ObjType::Map)
+            tx.put_object(automerge::ROOT, schema::BOOKMARKS, ObjType::Map)
                 .unwrap();
             let meta = tx
-                .put_object(automerge::ROOT, "meta", ObjType::Map)
+                .put_object(automerge::ROOT, schema::META, ObjType::Map)
                 .unwrap();
-            tx.put(&meta, "schema_version", 1_u64).unwrap();
-            tx.put(&meta, "collection_name", "bookmarks").unwrap();
+            tx.put(&meta, schema::SCHEMA_VERSION, 1_u64).unwrap();
+            tx.put(&meta, schema::COLLECTION_NAME, "bookmarks").unwrap();
             let root = tx
                 .put_object(&folders, root_id.as_str(), ObjType::Map)
                 .unwrap();
-            tx.put(&root, "title", "Bookmarks").unwrap();
-            tx.put_object(&root, "children", ObjType::List).unwrap();
-            tx.put(&root, "created_at", now.as_str()).unwrap();
-            tx.put(&root, "updated_at", now.as_str()).unwrap();
-            tx.put(&root, "deleted", false).unwrap();
+            tx.put(&root, schema::TITLE, "Bookmarks").unwrap();
+            tx.put_object(&root, schema::CHILDREN, ObjType::List)
+                .unwrap();
+            tx.put(&root, schema::CREATED_AT, now.as_str()).unwrap();
+            tx.put(&root, schema::UPDATED_AT, now.as_str()).unwrap();
+            tx.put(&root, schema::DELETED, false).unwrap();
             tx.commit_with(CommitOptions::default().with_message("init_schema"));
         });
         (doc_handle, temp_dir, root_id)

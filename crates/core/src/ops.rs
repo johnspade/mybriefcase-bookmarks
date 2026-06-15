@@ -25,7 +25,7 @@ pub fn add_bookmark(
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let bookmarks = tx
-            .get(automerge::ROOT, "bookmarks")?
+            .get(automerge::ROOT, schema::BOOKMARKS)?
             .context("missing bookmarks map")?
             .1;
         let bm = tx.put_object(&bookmarks, id.as_str(), ObjType::Map)?;
@@ -42,7 +42,7 @@ pub fn add_bookmark(
             },
         )?;
         let folders = tx
-            .get(automerge::ROOT, "folders")?
+            .get(automerge::ROOT, schema::FOLDERS)?
             .context("missing folders map")?
             .1;
         let folder = tx
@@ -71,7 +71,7 @@ pub fn update_favicon(
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let bookmarks = tx
-            .get(automerge::ROOT, "bookmarks")?
+            .get(automerge::ROOT, schema::BOOKMARKS)?
             .context("missing bookmarks map")?
             .1;
         let bm = tx
@@ -97,7 +97,7 @@ pub fn create_folder(
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let folders = tx
-            .get(automerge::ROOT, "folders")?
+            .get(automerge::ROOT, schema::FOLDERS)?
             .context("missing folders map")?
             .1;
         let f = tx.put_object(&folders, id.as_str(), ObjType::Map)?;
@@ -129,7 +129,7 @@ pub fn update_bookmark(
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let bookmarks = tx
-            .get(automerge::ROOT, "bookmarks")?
+            .get(automerge::ROOT, schema::BOOKMARKS)?
             .context("missing bookmarks map")?
             .1;
         let bm = tx
@@ -149,7 +149,7 @@ pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> anyhow::Res
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let bookmarks = tx
-            .get(automerge::ROOT, "bookmarks")?
+            .get(automerge::ROOT, schema::BOOKMARKS)?
             .context("missing bookmarks map")?
             .1;
         let bm = tx
@@ -160,7 +160,7 @@ pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> anyhow::Res
         tx.put(&bm, schema::UPDATED_AT, now.as_str())?;
 
         let folders = tx
-            .get(automerge::ROOT, "folders")?
+            .get(automerge::ROOT, schema::FOLDERS)?
             .context("missing folders map")?
             .1;
         let folder_keys = tx.keys(&folders).collect::<Vec<_>>();
@@ -238,11 +238,11 @@ pub fn delete_folder(doc_handle: &DocHandle, folder_id: &str) -> anyhow::Result<
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let folders = tx
-            .get(automerge::ROOT, "folders")?
+            .get(automerge::ROOT, schema::FOLDERS)?
             .context("missing folders map")?
             .1;
         let bookmarks = tx
-            .get(automerge::ROOT, "bookmarks")?
+            .get(automerge::ROOT, schema::BOOKMARKS)?
             .context("missing bookmarks map")?
             .1;
 
@@ -282,7 +282,7 @@ pub fn rename_folder(
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let folders = tx
-            .get(automerge::ROOT, "folders")?
+            .get(automerge::ROOT, schema::FOLDERS)?
             .context("missing folders map")?
             .1;
         let folder = tx
@@ -312,7 +312,7 @@ pub fn move_item(
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let folders = tx
-            .get(automerge::ROOT, "folders")?
+            .get(automerge::ROOT, schema::FOLDERS)?
             .context("missing folders map")?
             .1;
 
@@ -482,11 +482,11 @@ pub fn import_items(
     doc_handle.with_doc_mut(|doc| -> anyhow::Result<()> {
         let mut tx = doc.transaction();
         let folders = tx
-            .get(automerge::ROOT, "folders")?
+            .get(automerge::ROOT, schema::FOLDERS)?
             .context("missing folders map")?
             .1;
         let bookmarks_map = tx
-            .get(automerge::ROOT, "bookmarks")?
+            .get(automerge::ROOT, schema::BOOKMARKS)?
             .context("missing bookmarks map")?
             .1;
 
@@ -523,7 +523,7 @@ pub fn revert_bookmark(
         let target_heads = &[*target_hash];
 
         let bookmarks_obj = doc
-            .get(automerge::ROOT, "bookmarks")?
+            .get(automerge::ROOT, schema::BOOKMARKS)?
             .context("missing bookmarks map")?
             .1;
         let bm_obj = doc
@@ -587,26 +587,27 @@ mod tests {
             let mut tx = doc.transaction();
             let now = chrono::Utc::now().to_rfc3339();
             let root_id = uuid::Uuid::new_v4().to_string();
-            tx.put(automerge::ROOT, "root_folder_id", root_id.as_str())
+            tx.put(automerge::ROOT, schema::ROOT_FOLDER_ID, root_id.as_str())
                 .unwrap();
             let folders = tx
-                .put_object(automerge::ROOT, "folders", ObjType::Map)
+                .put_object(automerge::ROOT, schema::FOLDERS, ObjType::Map)
                 .unwrap();
-            tx.put_object(automerge::ROOT, "bookmarks", ObjType::Map)
+            tx.put_object(automerge::ROOT, schema::BOOKMARKS, ObjType::Map)
                 .unwrap();
             let meta = tx
-                .put_object(automerge::ROOT, "meta", ObjType::Map)
+                .put_object(automerge::ROOT, schema::META, ObjType::Map)
                 .unwrap();
-            tx.put(&meta, "schema_version", 1_u64).unwrap();
-            tx.put(&meta, "collection_name", "bookmarks").unwrap();
+            tx.put(&meta, schema::SCHEMA_VERSION, 1_u64).unwrap();
+            tx.put(&meta, schema::COLLECTION_NAME, "bookmarks").unwrap();
             let root = tx
                 .put_object(&folders, root_id.as_str(), ObjType::Map)
                 .unwrap();
-            tx.put(&root, "title", "Bookmarks").unwrap();
-            tx.put_object(&root, "children", ObjType::List).unwrap();
-            tx.put(&root, "created_at", now.as_str()).unwrap();
-            tx.put(&root, "updated_at", now.as_str()).unwrap();
-            tx.put(&root, "deleted", false).unwrap();
+            tx.put(&root, schema::TITLE, "Bookmarks").unwrap();
+            tx.put_object(&root, schema::CHILDREN, ObjType::List)
+                .unwrap();
+            tx.put(&root, schema::CREATED_AT, now.as_str()).unwrap();
+            tx.put(&root, schema::UPDATED_AT, now.as_str()).unwrap();
+            tx.put(&root, schema::DELETED, false).unwrap();
             tx.commit_with(CommitOptions::default().with_message("init_schema"));
         });
         (doc_handle, temp_dir)

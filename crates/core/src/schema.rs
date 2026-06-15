@@ -1,6 +1,13 @@
 use automerge::ObjId;
 use automerge::transaction::Transactable;
 
+// Top-level document (BookmarkStore) fields
+pub const ROOT_FOLDER_ID: &str = "root_folder_id";
+pub const FOLDERS: &str = "folders";
+pub const BOOKMARKS: &str = "bookmarks";
+pub const META: &str = "meta";
+
+// Bookmark fields
 pub const URL: &str = "url";
 pub const TITLE: &str = "title";
 pub const NOTES: &str = "notes";
@@ -8,7 +15,13 @@ pub const FAVICON: &str = "favicon";
 pub const CREATED_AT: &str = "created_at";
 pub const UPDATED_AT: &str = "updated_at";
 pub const DELETED: &str = "deleted";
+
+// Folder fields (TITLE, CREATED_AT, UPDATED_AT, DELETED shared with Bookmark)
 pub const CHILDREN: &str = "children";
+
+// StoreMeta fields
+pub const SCHEMA_VERSION: &str = "schema_version";
+pub const COLLECTION_NAME: &str = "collection_name";
 
 pub struct BookmarkFields<'a> {
     pub url: &'a str,

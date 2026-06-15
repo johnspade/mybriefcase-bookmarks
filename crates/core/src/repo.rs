@@ -4,6 +4,8 @@ use automerge_repo::tokio::FsStorage;
 use automerge_repo::{DocHandle, DocumentId, Repo, RepoHandle};
 use std::path::Path;
 
+use crate::schema;
+
 /// # Panics
 /// Panics if the local storage cannot be initialized or the document cannot be loaded.
 pub async fn init_repo(
@@ -42,38 +44,41 @@ pub async fn init_repo(
             let now = chrono::Utc::now().to_rfc3339();
             let root_id = uuid::Uuid::new_v4().to_string();
 
-            tx.put(automerge::ROOT, "root_folder_id", root_id.as_str())
+            tx.put(automerge::ROOT, schema::ROOT_FOLDER_ID, root_id.as_str())
                 .unwrap();
             let folders = tx
-                .put_object(automerge::ROOT, "folders", ObjType::Map)
+                .put_object(automerge::ROOT, schema::FOLDERS, ObjType::Map)
                 .unwrap();
-            tx.put_object(automerge::ROOT, "bookmarks", ObjType::Map)
+            tx.put_object(automerge::ROOT, schema::BOOKMARKS, ObjType::Map)
                 .unwrap();
             let meta = tx
-                .put_object(automerge::ROOT, "meta", ObjType::Map)
+                .put_object(automerge::ROOT, schema::META, ObjType::Map)
                 .unwrap();
-            tx.put(&meta, "schema_version", 1_u64).unwrap();
-            tx.put(&meta, "collection_name", "bookmarks").unwrap();
+            tx.put(&meta, schema::SCHEMA_VERSION, 1_u64).unwrap();
+            tx.put(&meta, schema::COLLECTION_NAME, "bookmarks").unwrap();
 
             let root = tx
                 .put_object(&folders, root_id.as_str(), ObjType::Map)
                 .unwrap();
-            tx.put(&root, "title", "Bookmarks").unwrap();
-            let root_children = tx.put_object(&root, "children", ObjType::List).unwrap();
-            tx.put(&root, "created_at", now.as_str()).unwrap();
-            tx.put(&root, "updated_at", now.as_str()).unwrap();
-            tx.put(&root, "deleted", false).unwrap();
+            tx.put(&root, schema::TITLE, "Bookmarks").unwrap();
+            let root_children = tx
+                .put_object(&root, schema::CHILDREN, ObjType::List)
+                .unwrap();
+            tx.put(&root, schema::CREATED_AT, now.as_str()).unwrap();
+            tx.put(&root, schema::UPDATED_AT, now.as_str()).unwrap();
+            tx.put(&root, schema::DELETED, false).unwrap();
 
             for (i, title) in ["Bookmarks Bar", "Other Bookmarks"].iter().enumerate() {
                 let sub_id = uuid::Uuid::new_v4().to_string();
                 let sub = tx
                     .put_object(&folders, sub_id.as_str(), ObjType::Map)
                     .unwrap();
-                tx.put(&sub, "title", *title).unwrap();
-                tx.put_object(&sub, "children", ObjType::List).unwrap();
-                tx.put(&sub, "created_at", now.as_str()).unwrap();
-                tx.put(&sub, "updated_at", now.as_str()).unwrap();
-                tx.put(&sub, "deleted", false).unwrap();
+                tx.put(&sub, schema::TITLE, *title).unwrap();
+                tx.put_object(&sub, schema::CHILDREN, ObjType::List)
+                    .unwrap();
+                tx.put(&sub, schema::CREATED_AT, now.as_str()).unwrap();
+                tx.put(&sub, schema::UPDATED_AT, now.as_str()).unwrap();
+                tx.put(&sub, schema::DELETED, false).unwrap();
                 tx.insert(&root_children, i, sub_id.as_str()).unwrap();
             }
             tx.commit();
