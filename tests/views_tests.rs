@@ -902,3 +902,552 @@ async fn edit_form_contains_favicon_section() {
     assert!(html.contains("Refetch"), "should have Refetch label");
     assert!(html.contains("Delete"), "should have Delete label");
 }
+
+// ─── HTML structural assertions ─────────────────────
+
+/// Helper: parse HTML and select elements matching a CSS selector.
+fn select_all(html: &str, selector: &str) -> Vec<scraper::ElementRef<'static>> {
+    // We leak the Html to get a 'static lifetime for ElementRef — acceptable in tests.
+    let document = Box::leak(Box::new(scraper::Html::parse_fragment(html)));
+    let sel = scraper::Selector::parse(selector).unwrap();
+    document.select(&sel).collect()
+}
+
+/// Helper: check that an element has a specific attribute value.
+fn has_attr(el: &scraper::ElementRef, attr: &str, value: &str) -> bool {
+    el.value().attr(attr) == Some(value)
+}
+
+// ─── HTMX attribute assertions ──────────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_htmx_wiring_breadcrumbs() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    ops::create_folder(&doc, &root_id, "Child").unwrap();
+
+    // Navigate to child to get breadcrumbs with links
+    let (status, html) = get_html(app.clone(), &format!("/folders/{root_id}/content")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Root folder with no subfolders in path won't have clickable breadcrumbs,
+    // but the structure should still include the breadcrumb container.
+    let breadcrumb = select_all(&html, "#breadcrumb");
+    assert!(
+        !breadcrumb.is_empty(),
+        "breadcrumb container with id should exist"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_htmx_wiring_bookmark_items() {
+    let (app, root_id) = build_views_app();
+    create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // Bookmark list items should have hx-get pointing to detail
+    let items = select_all(&html, ".list-item[hx-get]");
+    assert!(!items.is_empty(), "bookmark items should have hx-get");
+    for item in &items {
+        let hx_get = item.value().attr("hx-get").unwrap();
+        assert!(
+            hx_get.contains("/bookmarks/") && hx_get.contains("/detail"),
+            "hx-get should point to bookmark detail: {hx_get}"
+        );
+        assert!(
+            has_attr(item, "hx-target", "#detail-body"),
+            "hx-target should be #detail-body"
+        );
+        assert!(
+            has_attr(item, "hx-swap", "innerHTML"),
+            "hx-swap should be innerHTML"
+        );
+    }
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_htmx_wiring_folder_items() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    ops::create_folder(&doc, &root_id, "SubFolder").unwrap();
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // Folder list items navigate via hx-get
+    let folder_items = select_all(&html, ".list-item[hx-get][hx-push-url]");
+    assert!(
+        !folder_items.is_empty(),
+        "folder items should have hx-get and hx-push-url"
+    );
+    for item in &folder_items {
+        let hx_get = item.value().attr("hx-get").unwrap();
+        assert!(
+            hx_get.starts_with("/folders/"),
+            "folder hx-get should target /folders/: {hx_get}"
+        );
+        assert!(
+            has_attr(item, "hx-target", "#folder-content"),
+            "folder hx-target should be #folder-content"
+        );
+        assert!(
+            has_attr(item, "hx-swap", "innerHTML"),
+            "folder hx-swap should be innerHTML"
+        );
+    }
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_htmx_delete_button_wiring() {
+    let (app, root_id) = build_views_app();
+    create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // Delete buttons should use hx-post, hx-target, hx-include, hx-confirm
+    let delete_btns = select_all(&html, "button[hx-post][hx-confirm]");
+    assert!(
+        !delete_btns.is_empty(),
+        "should have delete buttons with hx-post and hx-confirm"
+    );
+    for btn in &delete_btns {
+        let hx_post = btn.value().attr("hx-post").unwrap();
+        assert!(
+            hx_post.contains("/remove"),
+            "delete hx-post should point to /remove endpoint: {hx_post}"
+        );
+        assert!(
+            has_attr(btn, "hx-target", "#folder-content"),
+            "delete should target #folder-content"
+        );
+        assert!(
+            has_attr(btn, "hx-swap", "innerHTML"),
+            "delete should use innerHTML swap"
+        );
+        assert!(
+            has_attr(btn, "hx-include", "#current-folder-id"),
+            "delete should include #current-folder-id"
+        );
+    }
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn detail_view_htmx_edit_button() {
+    let (app, root_id) = build_views_app();
+    let bm_id = create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/bookmarks/{bm_id}/detail")).await;
+
+    // Edit button should trigger loading edit form into modal
+    let edit_btns = select_all(&html, "button[hx-get]");
+    let edit_btn = edit_btns
+        .iter()
+        .find(|b| {
+            b.value()
+                .attr("hx-get")
+                .is_some_and(|v| v.contains("/edit-form"))
+        })
+        .expect("should have edit button with hx-get pointing to edit-form");
+    assert!(
+        has_attr(edit_btn, "hx-target", "#edit-modal-body"),
+        "edit button should target #edit-modal-body"
+    );
+    assert!(
+        has_attr(edit_btn, "hx-swap", "innerHTML"),
+        "edit button should use innerHTML swap"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn detail_view_htmx_delete_button() {
+    let (app, root_id) = build_views_app();
+    let bm_id = create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/bookmarks/{bm_id}/detail")).await;
+
+    let delete_btns = select_all(&html, "button[hx-post][hx-confirm]");
+    assert!(
+        !delete_btns.is_empty(),
+        "detail view should have a delete button"
+    );
+    let delete_btn = &delete_btns[0];
+    let hx_post = delete_btn.value().attr("hx-post").unwrap();
+    assert!(
+        hx_post.contains("/remove"),
+        "delete hx-post should point to /remove: {hx_post}"
+    );
+    assert!(
+        has_attr(delete_btn, "hx-include", "#current-folder-id"),
+        "delete should include current-folder-id"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn detail_view_htmx_history_button() {
+    let (app, root_id) = build_views_app();
+    let bm_id = create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/bookmarks/{bm_id}/detail")).await;
+
+    let history_btns = select_all(&html, "button[hx-get]");
+    let history_btn = history_btns
+        .iter()
+        .find(|b| {
+            b.value()
+                .attr("hx-get")
+                .is_some_and(|v| v.contains("/history"))
+        })
+        .expect("should have history button with hx-get");
+    assert!(
+        has_attr(history_btn, "hx-target", "#detail-body"),
+        "history button should target #detail-body"
+    );
+    assert!(
+        has_attr(history_btn, "hx-swap", "innerHTML"),
+        "history button should use innerHTML swap"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_form_htmx_submit_wiring() {
+    let (app, root_id) = build_views_app();
+    let bm_id = create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/bookmarks/{bm_id}/edit-form")).await;
+
+    // The form itself should have hx-post, hx-target, hx-swap
+    let forms = select_all(&html, "form[hx-post]");
+    assert!(!forms.is_empty(), "edit form should have hx-post");
+    let form = &forms[0];
+    let hx_post = form.value().attr("hx-post").unwrap();
+    assert!(
+        hx_post.contains("/edit"),
+        "form hx-post should point to /edit: {hx_post}"
+    );
+    assert!(
+        has_attr(form, "hx-target", "#detail-body"),
+        "form should target #detail-body"
+    );
+    assert!(
+        has_attr(form, "hx-swap", "innerHTML"),
+        "form should use innerHTML swap"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_form_htmx_fetch_favicon_wiring() {
+    let (app, root_id) = build_views_app();
+    let bm_id = create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/bookmarks/{bm_id}/edit-form")).await;
+
+    // Refetch button should have hx-post, hx-target, hx-swap
+    let refetch_btns = select_all(&html, "button[hx-post]");
+    let refetch_btn = refetch_btns
+        .iter()
+        .find(|b| {
+            b.value()
+                .attr("hx-post")
+                .is_some_and(|v| v.contains("/fetch-favicon"))
+        })
+        .expect("should have refetch button with hx-post");
+    assert!(
+        has_attr(refetch_btn, "hx-target", "#favicon-preview"),
+        "refetch should target #favicon-preview"
+    );
+    assert!(
+        has_attr(refetch_btn, "hx-swap", "outerHTML"),
+        "refetch should use outerHTML swap"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn settings_page_htmx_import_form() {
+    let (app, _root_id) = build_views_app();
+
+    let (_, html) = get_html(app, "/settings").await;
+
+    let forms = select_all(&html, "form[hx-post]");
+    let import_form = forms
+        .iter()
+        .find(|f| {
+            f.value()
+                .attr("hx-post")
+                .is_some_and(|v| v.contains("/import"))
+        })
+        .expect("settings page should have import form with hx-post");
+    assert!(
+        has_attr(import_form, "hx-swap", "none"),
+        "import form should use hx-swap=none"
+    );
+    assert!(
+        has_attr(import_form, "hx-encoding", "multipart/form-data"),
+        "import form should set hx-encoding for multipart"
+    );
+}
+
+// ─── ARIA attribute assertions ──────────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_aria_attributes() {
+    let (app, root_id) = build_views_app();
+    create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // View settings button should have aria-label and aria-haspopup
+    let view_btns = select_all(&html, "button[aria-label=\"View settings\"]");
+    assert!(
+        !view_btns.is_empty(),
+        "should have view settings button with aria-label"
+    );
+    assert!(
+        has_attr(&view_btns[0], "aria-haspopup", "true"),
+        "view settings button should have aria-haspopup=true"
+    );
+
+    // SVG icons should be aria-hidden
+    let hidden_svgs = select_all(&html, "svg[aria-hidden=\"true\"]");
+    assert!(
+        !hidden_svgs.is_empty(),
+        "decorative SVGs should have aria-hidden=true"
+    );
+
+    // "More actions" buttons should have aria-label
+    let action_btns = select_all(&html, "button[aria-label=\"More actions\"]");
+    assert!(
+        !action_btns.is_empty(),
+        "context menu buttons should have aria-label='More actions'"
+    );
+
+    // "Open bookmark" button should have aria-label
+    let open_btns = select_all(&html, "button[aria-label=\"Open bookmark\"]");
+    assert!(
+        !open_btns.is_empty(),
+        "open button should have aria-label='Open bookmark'"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_grid_view_aria() {
+    let (app, root_id) = build_views_app();
+    create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // Grid view buttons for list/grid should have aria-label
+    let list_btn = select_all(&html, "button[aria-label=\"List view\"]");
+    assert!(
+        !list_btn.is_empty(),
+        "should have list view button with aria-label"
+    );
+    let grid_btn = select_all(&html, "button[aria-label=\"Grid view\"]");
+    assert!(
+        !grid_btn.is_empty(),
+        "should have grid view button with aria-label"
+    );
+}
+
+// ─── Alpine.js binding assertions ───────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_alpine_view_settings() {
+    let (app, root_id) = build_views_app();
+    create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // View settings container should have x-data for open state
+    let xdata_els = select_all(&html, ".view-settings[x-data]");
+    assert!(
+        !xdata_els.is_empty(),
+        "view-settings should have x-data binding"
+    );
+
+    // Settings popover should have x-show for visibility toggle
+    let popover = select_all(&html, ".settings-popover[x-show]");
+    assert!(
+        !popover.is_empty(),
+        "settings popover should have x-show binding"
+    );
+
+    // Items list and grid should have x-show for view mode switching
+    let items_list = select_all(&html, ".items-list[x-show]");
+    assert!(
+        !items_list.is_empty(),
+        "items-list should have x-show for view mode"
+    );
+    let items_grid = select_all(&html, ".items-grid[x-show]");
+    assert!(
+        !items_grid.is_empty(),
+        "items-grid should have x-show for view mode"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_alpine_context_menus() {
+    let (app, root_id) = build_views_app();
+    create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // Item action containers should have x-data for menu state
+    let action_xdata = select_all(&html, ".item-actions[x-data]");
+    assert!(
+        !action_xdata.is_empty(),
+        "item-actions should have x-data for menu state"
+    );
+
+    // Item menus should have x-show for visibility
+    let menus = select_all(&html, ".item-menu[x-show]");
+    assert!(!menus.is_empty(), "item-menu should have x-show binding");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_form_alpine_bindings() {
+    let (app, root_id) = build_views_app();
+    let bm_id = create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/bookmarks/{bm_id}/edit-form")).await;
+
+    // Form should have x-init for htmx processing
+    let forms = select_all(&html, "form[x-init]");
+    assert!(
+        !forms.is_empty(),
+        "edit form should have x-init for htmx.process"
+    );
+
+    // Favicon preview container should have id for targeting
+    let preview = select_all(&html, "#favicon-preview");
+    assert!(
+        !preview.is_empty(),
+        "favicon-preview element should exist for hx-target"
+    );
+}
+
+// ─── ID/hx-target cross-reference assertions ────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_id_targets_exist() {
+    let (app, root_id) = build_views_app();
+    create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // Elements that use hx-target="#folder-content" — the target exists in the
+    // parent page (base.html), not this partial. But hx-include="#current-folder-id"
+    // references an element that MUST exist in this partial.
+    let current_folder_input = select_all(&html, "#current-folder-id");
+    assert!(
+        !current_folder_input.is_empty(),
+        "current-folder-id input must exist (referenced by hx-include)"
+    );
+
+    // Verify the hidden input has the correct folder_id value
+    let input = &current_folder_input[0];
+    assert_eq!(
+        input.value().attr("value").unwrap(),
+        root_id,
+        "current-folder-id should contain the folder id"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn edit_form_id_targets_exist() {
+    let (app, root_id) = build_views_app();
+    let bm_id = create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/bookmarks/{bm_id}/edit-form")).await;
+
+    // hx-target="#favicon-preview" on the refetch button means #favicon-preview must exist
+    let favicon_preview = select_all(&html, "#favicon-preview");
+    assert!(
+        !favicon_preview.is_empty(),
+        "#favicon-preview must exist (referenced by refetch button hx-target)"
+    );
+
+    // The refetch button's hx-target value should match an existing element id
+    let refetch_btns = select_all(&html, "button[hx-post][hx-target]");
+    for btn in &refetch_btns {
+        let target = btn.value().attr("hx-target").unwrap();
+        if let Some(target_id) = target.strip_prefix('#') {
+            let found = select_all(&html, &format!("#{target_id}"));
+            assert!(
+                !found.is_empty(),
+                "hx-target '{target}' should reference an existing element in the partial"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn detail_view_htmx_targets_reference_known_ids() {
+    let (app, root_id) = build_views_app();
+    let bm_id = create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/bookmarks/{bm_id}/detail")).await;
+
+    // Collect all hx-target values from this partial
+    let all_with_target = select_all(&html, "[hx-target]");
+    for el in &all_with_target {
+        let target = el.value().attr("hx-target").unwrap();
+        // These targets reference elements in the parent page (base.html):
+        // #folder-content, #detail-body, #edit-modal-body
+        // We verify they use the expected selector format
+        assert!(
+            target.starts_with('#'),
+            "hx-target should be an id selector: {target}"
+        );
+        let valid_targets = [
+            "#folder-content",
+            "#detail-body",
+            "#edit-modal-body",
+            "#favicon-preview",
+        ];
+        assert!(
+            valid_targets.contains(&target),
+            "hx-target '{target}' should be one of the known page targets"
+        );
+    }
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn folder_content_htmx_include_references_existing_id() {
+    let (app, root_id) = build_views_app();
+    create_bookmark(&app, &root_id).await;
+
+    let (_, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+
+    // All hx-include references should point to elements in this partial
+    let includes = select_all(&html, "[hx-include]");
+    for el in &includes {
+        let include_sel = el.value().attr("hx-include").unwrap();
+        assert!(
+            include_sel.starts_with('#'),
+            "hx-include should be an id selector: {include_sel}"
+        );
+        let target_id = &include_sel[1..];
+        let found = select_all(&html, &format!("#{target_id}"));
+        assert!(
+            !found.is_empty(),
+            "hx-include '{include_sel}' must reference an existing element"
+        );
+    }
+}
