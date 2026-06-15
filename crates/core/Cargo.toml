@@ -11,6 +11,7 @@ name = "mybriefcase_bookmarks_core"
 path = "src/lib.rs"
 
 [dependencies]
+mutants = "0.0.3"
 anyhow = "1.0.79"
 automerge = "0.7"
 automerge_repo = { version = "0.3", features = ["tokio"] }

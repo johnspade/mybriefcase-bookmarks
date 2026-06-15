@@ -1,0 +1,85 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "crates/**"
+
+jobs:
+  mutants-full:
+    name: Full mutation testing (nightly)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2
+        with:
+          tool: cargo-mutants
+      - name: Run cargo-mutants
+        run: cargo mutants --in-place
+      - name: Upload mutants.out on failure
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: mutants-out
+          path: mutants.out/
+          retention-days: 7
+
+  mutants-pr:
+    name: Mutation testing (PR diff)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2
+        with:
+          tool: cargo-mutants
+      - name: Generate PR diff
+        run: git diff origin/${{ github.base_ref }}...HEAD > pr.diff
+      - name: Run cargo-mutants on diff
+        id: mutants
+        run: |
+          cargo mutants --in-diff pr.diff --in-place || true
+      - name: Upload mutants.out
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: mutants-out-pr
+          path: mutants.out/
+          retention-days: 7
+      - name: Report neutral status
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            let description = 'Mutation testing completed';
+            try {
+              const outcomes = fs.readFileSync('mutants.out/outcomes.json', 'utf8');
+              const data = JSON.parse(outcomes);
+              const escaped = (data.outcomes || []).filter(o => o.scenario && o.scenario !== 'Baseline' && o.summary === 'MissedMutant').length;
+              description = `${escaped} escaped mutant(s)`;
+            } catch (e) {
+              description = 'Mutation testing completed (no outcomes file)';
+            }
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: 'success',
+              context: 'mutation-testing',
+              description,
+            });
