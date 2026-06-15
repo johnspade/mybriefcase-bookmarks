@@ -1,14 +1,62 @@
 use automerge::ObjId;
 use automerge::transaction::Transactable;
+use strum_macros::{AsRefStr, EnumIter, IntoStaticStr};
 
-pub const URL: &str = "url";
-pub const TITLE: &str = "title";
-pub const NOTES: &str = "notes";
-pub const FAVICON: &str = "favicon";
-pub const CREATED_AT: &str = "created_at";
-pub const UPDATED_AT: &str = "updated_at";
-pub const DELETED: &str = "deleted";
-pub const CHILDREN: &str = "children";
+/// Top-level document (`BookmarkStore`) fields.
+#[derive(Debug, Clone, Copy, EnumIter, IntoStaticStr, AsRefStr)]
+pub enum BookmarkStoreField {
+    #[strum(serialize = "root_folder_id")]
+    RootFolderId,
+    #[strum(serialize = "folders")]
+    Folders,
+    #[strum(serialize = "bookmarks")]
+    Bookmarks,
+    #[strum(serialize = "meta")]
+    Meta,
+}
+
+/// `Bookmark` fields.
+#[derive(Debug, Clone, Copy, EnumIter, IntoStaticStr, AsRefStr)]
+pub enum BookmarkField {
+    #[strum(serialize = "url")]
+    Url,
+    #[strum(serialize = "title")]
+    Title,
+    #[strum(serialize = "notes")]
+    Notes,
+    #[strum(serialize = "favicon")]
+    Favicon,
+    #[strum(serialize = "created_at")]
+    CreatedAt,
+    #[strum(serialize = "updated_at")]
+    UpdatedAt,
+    #[strum(serialize = "deleted")]
+    Deleted,
+}
+
+/// `Folder` fields.
+#[derive(Debug, Clone, Copy, EnumIter, IntoStaticStr, AsRefStr)]
+pub enum FolderField {
+    #[strum(serialize = "title")]
+    Title,
+    #[strum(serialize = "children")]
+    Children,
+    #[strum(serialize = "created_at")]
+    CreatedAt,
+    #[strum(serialize = "updated_at")]
+    UpdatedAt,
+    #[strum(serialize = "deleted")]
+    Deleted,
+}
+
+/// `StoreMeta` fields.
+#[derive(Debug, Clone, Copy, EnumIter, IntoStaticStr, AsRefStr)]
+pub enum StoreMetaField {
+    #[strum(serialize = "schema_version")]
+    SchemaVersion,
+    #[strum(serialize = "collection_name")]
+    CollectionName,
+}
 
 pub struct BookmarkFields<'a> {
     pub url: &'a str,
@@ -26,13 +74,14 @@ pub fn write_bookmark(
     obj: &ObjId,
     fields: &BookmarkFields<'_>,
 ) -> Result<(), automerge::AutomergeError> {
-    tx.put(obj, URL, fields.url)?;
-    tx.put(obj, TITLE, fields.title)?;
-    tx.put(obj, NOTES, fields.notes)?;
-    tx.put(obj, FAVICON, fields.favicon)?;
-    tx.put(obj, CREATED_AT, fields.created_at)?;
-    tx.put(obj, UPDATED_AT, fields.updated_at)?;
-    tx.put(obj, DELETED, false)?;
+    use BookmarkField::{CreatedAt, Deleted, Favicon, Notes, Title, UpdatedAt, Url};
+    tx.put(obj, Url.as_ref(), fields.url)?;
+    tx.put(obj, Title.as_ref(), fields.title)?;
+    tx.put(obj, Notes.as_ref(), fields.notes)?;
+    tx.put(obj, Favicon.as_ref(), fields.favicon)?;
+    tx.put(obj, CreatedAt.as_ref(), fields.created_at)?;
+    tx.put(obj, UpdatedAt.as_ref(), fields.updated_at)?;
+    tx.put(obj, Deleted.as_ref(), false)?;
     Ok(())
 }
 
@@ -46,19 +95,24 @@ pub fn patch_bookmark(
     notes: Option<&str>,
     favicon: Option<&str>,
 ) -> Result<(), automerge::AutomergeError> {
+    use BookmarkField::{Favicon, Notes, Title, UpdatedAt, Url};
     if let Some(v) = url {
-        tx.put(obj, URL, v)?;
+        tx.put(obj, Url.as_ref(), v)?;
     }
     if let Some(v) = title {
-        tx.put(obj, TITLE, v)?;
+        tx.put(obj, Title.as_ref(), v)?;
     }
     if let Some(v) = notes {
-        tx.put(obj, NOTES, v)?;
+        tx.put(obj, Notes.as_ref(), v)?;
     }
     if let Some(v) = favicon {
-        tx.put(obj, FAVICON, v)?;
+        tx.put(obj, Favicon.as_ref(), v)?;
     }
-    tx.put(obj, UPDATED_AT, chrono::Utc::now().to_rfc3339().as_str())?;
+    tx.put(
+        obj,
+        UpdatedAt.as_ref(),
+        chrono::Utc::now().to_rfc3339().as_str(),
+    )?;
     Ok(())
 }
 
@@ -71,11 +125,12 @@ pub fn write_folder(
     created_at: &str,
     updated_at: &str,
 ) -> Result<ObjId, automerge::AutomergeError> {
-    tx.put(obj, TITLE, title)?;
-    let children = tx.put_object(obj, CHILDREN, automerge::ObjType::List)?;
-    tx.put(obj, CREATED_AT, created_at)?;
-    tx.put(obj, UPDATED_AT, updated_at)?;
-    tx.put(obj, DELETED, false)?;
+    use FolderField::{Children, CreatedAt, Deleted, Title, UpdatedAt};
+    tx.put(obj, Title.as_ref(), title)?;
+    let children = tx.put_object(obj, Children.as_ref(), automerge::ObjType::List)?;
+    tx.put(obj, CreatedAt.as_ref(), created_at)?;
+    tx.put(obj, UpdatedAt.as_ref(), updated_at)?;
+    tx.put(obj, Deleted.as_ref(), false)?;
     Ok(children)
 }
 
@@ -86,7 +141,12 @@ pub fn patch_folder(
     obj: &ObjId,
     title: &str,
 ) -> Result<(), automerge::AutomergeError> {
-    tx.put(obj, TITLE, title)?;
-    tx.put(obj, UPDATED_AT, chrono::Utc::now().to_rfc3339().as_str())?;
+    use FolderField::{Title, UpdatedAt};
+    tx.put(obj, Title.as_ref(), title)?;
+    tx.put(
+        obj,
+        UpdatedAt.as_ref(),
+        chrono::Utc::now().to_rfc3339().as_str(),
+    )?;
     Ok(())
 }

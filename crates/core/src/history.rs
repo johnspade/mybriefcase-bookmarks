@@ -2,6 +2,9 @@ use automerge::{ChangeHash, ReadDoc};
 use automerge_repo::DocHandle;
 use serde::Serialize;
 
+use crate::schema::BookmarkField::{CreatedAt, Notes, Title, UpdatedAt, Url};
+use crate::schema::BookmarkStoreField::Bookmarks;
+
 const MAX_HISTORY_ENTRIES: usize = 50;
 
 #[derive(Debug, Clone, Serialize)]
@@ -34,29 +37,29 @@ fn extract_bookmark_fields(
     bookmark_id: &str,
     heads: &[ChangeHash],
 ) -> Option<BookmarkSnapshot> {
-    let bookmarks_obj = doc.get(automerge::ROOT, "bookmarks").ok()??.1;
+    let bookmarks_obj = doc.get(automerge::ROOT, Bookmarks.as_ref()).ok()??.1;
     let bm_obj = doc.get(&bookmarks_obj, bookmark_id).ok()??.1;
 
     let url = doc
-        .get_at(&bm_obj, "url", heads)
+        .get_at(&bm_obj, Url.as_ref(), heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())?;
     let title = doc
-        .get_at(&bm_obj, "title", heads)
+        .get_at(&bm_obj, Title.as_ref(), heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())?;
     let notes = doc
-        .get_at(&bm_obj, "notes", heads)
+        .get_at(&bm_obj, Notes.as_ref(), heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())
         .unwrap_or_default();
     let created_at = doc
-        .get_at(&bm_obj, "created_at", heads)
+        .get_at(&bm_obj, CreatedAt.as_ref(), heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())
         .unwrap_or_default();
     let updated_at = doc
-        .get_at(&bm_obj, "updated_at", heads)
+        .get_at(&bm_obj, UpdatedAt.as_ref(), heads)
         .ok()?
         .map(|(v, _)| v.into_string().unwrap_or_default())
         .unwrap_or_default();
@@ -75,22 +78,22 @@ fn compute_field_changes(
     after: &BookmarkSnapshot,
 ) -> Vec<FieldChange> {
     let mut changes = Vec::new();
-    for (name, old_val, new_val) in [
+    for (field, old_val, new_val) in [
         (
-            "title",
+            Title,
             before.map(|s| s.title.as_str()),
             after.title.as_str(),
         ),
-        ("url", before.map(|s| s.url.as_str()), after.url.as_str()),
+        (Url, before.map(|s| s.url.as_str()), after.url.as_str()),
         (
-            "notes",
+            Notes,
             before.map(|s| s.notes.as_str()),
             after.notes.as_str(),
         ),
     ] {
         if old_val.is_none_or(|o| o != new_val) {
             changes.push(FieldChange {
-                field: name.to_string(),
+                field: <&str>::from(field).to_string(),
                 old_value: old_val.map(String::from),
                 new_value: Some(new_val.to_string()),
             });
@@ -200,6 +203,10 @@ pub fn parse_change_hash(hex: &str) -> Option<ChangeHash> {
 mod tests {
     use super::*;
     use crate::ops;
+    use crate::schema::BookmarkField::Deleted;
+    use crate::schema::BookmarkStoreField::{Folders, Meta, RootFolderId};
+    use crate::schema::FolderField::Children;
+    use crate::schema::StoreMetaField::{CollectionName, SchemaVersion};
     use automerge::ObjType;
     use automerge::transaction::{CommitOptions, Transactable};
     use automerge_repo::Repo;
@@ -216,26 +223,27 @@ mod tests {
         doc_handle.with_doc_mut(|doc| {
             let mut tx = doc.transaction();
             let now = chrono::Utc::now().to_rfc3339();
-            tx.put(automerge::ROOT, "root_folder_id", root_id.as_str())
+            tx.put(automerge::ROOT, RootFolderId.as_ref(), root_id.as_str())
                 .unwrap();
             let folders = tx
-                .put_object(automerge::ROOT, "folders", ObjType::Map)
+                .put_object(automerge::ROOT, Folders.as_ref(), ObjType::Map)
                 .unwrap();
-            tx.put_object(automerge::ROOT, "bookmarks", ObjType::Map)
+            tx.put_object(automerge::ROOT, Bookmarks.as_ref(), ObjType::Map)
                 .unwrap();
             let meta = tx
-                .put_object(automerge::ROOT, "meta", ObjType::Map)
+                .put_object(automerge::ROOT, Meta.as_ref(), ObjType::Map)
                 .unwrap();
-            tx.put(&meta, "schema_version", 1_u64).unwrap();
-            tx.put(&meta, "collection_name", "bookmarks").unwrap();
+            tx.put(&meta, SchemaVersion.as_ref(), 1_u64).unwrap();
+            tx.put(&meta, CollectionName.as_ref(), "bookmarks").unwrap();
             let root = tx
                 .put_object(&folders, root_id.as_str(), ObjType::Map)
                 .unwrap();
-            tx.put(&root, "title", "Bookmarks").unwrap();
-            tx.put_object(&root, "children", ObjType::List).unwrap();
-            tx.put(&root, "created_at", now.as_str()).unwrap();
-            tx.put(&root, "updated_at", now.as_str()).unwrap();
-            tx.put(&root, "deleted", false).unwrap();
+            tx.put(&root, Title.as_ref(), "Bookmarks").unwrap();
+            tx.put_object(&root, Children.as_ref(), ObjType::List)
+                .unwrap();
+            tx.put(&root, CreatedAt.as_ref(), now.as_str()).unwrap();
+            tx.put(&root, UpdatedAt.as_ref(), now.as_str()).unwrap();
+            tx.put(&root, Deleted.as_ref(), false).unwrap();
             tx.commit_with(CommitOptions::default().with_message("init_schema"));
         });
         (doc_handle, temp_dir, root_id)
