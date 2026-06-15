@@ -81,7 +81,7 @@ fn extract_crate_imports(source: &str) -> Vec<String> {
 fn extract_module_from_use(line: &str) -> Option<String> {
     // "use crate::schema;" or "use crate::schema::CHILDREN;"
     let after_crate = line.strip_prefix("use crate::")?;
-    let module = after_crate.split(|c: char| c == ':' || c == ';' || c == '{').next()?;
+    let module = after_crate.split([':', ';', '{']).next()?;
     let module = module.trim();
     if module.is_empty() {
         return None;
@@ -95,7 +95,7 @@ fn extract_inline_crate_refs(line: &str) -> Vec<String> {
     while let Some(pos) = line[search_from..].find("crate::") {
         let abs_pos = search_from + pos;
         let after = &line[abs_pos + 7..];
-        if let Some(module) = after.split(|c: char| c == ':' || c == ' ' || c == ')' || c == ',').next() {
+        if let Some(module) = after.split([':', ' ', ')', ',']).next() {
             let module = module.trim();
             if !module.is_empty() {
                 modules.push(module.to_string());
@@ -150,23 +150,23 @@ mod unit_tests {
 
     #[test]
     fn skips_cfg_test_imports() {
-        let source = r#"
+        let source = r"
 use crate::schema;
 
 #[cfg(test)]
 mod tests {
     use crate::model::BookmarkStore;
 }
-"#;
+";
         let imports = extract_crate_imports(source);
         assert_eq!(imports, vec!["schema"]);
     }
 
     #[test]
     fn extracts_inline_crate_refs() {
-        let source = r#"
+        let source = r"
 fn foo(items: &[crate::import::ImportedItem]) {}
-"#;
+";
         let imports = extract_crate_imports(source);
         assert_eq!(imports, vec!["import"]);
     }
