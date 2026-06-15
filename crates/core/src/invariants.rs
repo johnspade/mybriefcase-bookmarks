@@ -1,47 +1,5 @@
-// Canonical implementation: crates/core/src/invariants.rs (used as ops.rs postconditions).
-// This copy exists because #[cfg(test)] modules are not visible to integration tests.
-use mybriefcase_bookmarks::model::BookmarkStore;
-use std::collections::{BTreeSet, HashSet};
-
-pub fn assert_stores_converged(a: &BookmarkStore, b: &BookmarkStore) {
-    assert_eq!(
-        a.bookmarks.len(),
-        b.bookmarks.len(),
-        "bookmark count mismatch: {} vs {}",
-        a.bookmarks.len(),
-        b.bookmarks.len()
-    );
-    assert_eq!(
-        a.folders.len(),
-        b.folders.len(),
-        "folder count mismatch: {} vs {}",
-        a.folders.len(),
-        b.folders.len()
-    );
-    for (id, bm_a) in &a.bookmarks {
-        let bm_b = b
-            .bookmarks
-            .get(id)
-            .unwrap_or_else(|| panic!("bookmark {id} missing in peer B"));
-        assert_eq!(bm_a.url, bm_b.url, "url mismatch for bookmark {id}");
-        assert_eq!(bm_a.title, bm_b.title, "title mismatch for bookmark {id}");
-        assert_eq!(
-            bm_a.deleted, bm_b.deleted,
-            "deleted mismatch for bookmark {id}"
-        );
-    }
-    for (id, f_a) in &a.folders {
-        let f_b = b
-            .folders
-            .get(id)
-            .unwrap_or_else(|| panic!("folder {id} missing in peer B"));
-        assert_eq!(f_a.title, f_b.title, "title mismatch for folder {id}");
-        assert_eq!(f_a.deleted, f_b.deleted, "deleted mismatch for folder {id}");
-        let set_a: BTreeSet<_> = f_a.children.iter().collect();
-        let set_b: BTreeSet<_> = f_b.children.iter().collect();
-        assert_eq!(set_a, set_b, "children set mismatch for folder {id}");
-    }
-}
+use crate::model::BookmarkStore;
+use std::collections::HashSet;
 
 pub fn assert_valid_tree(store: &BookmarkStore) {
     assert_no_cycles(store, &store.root_folder_id, &mut HashSet::new());
@@ -66,10 +24,9 @@ fn assert_no_cycles(store: &BookmarkStore, folder_id: &str, path: &mut HashSet<S
     path.remove(folder_id);
 }
 
+/// # Panics
+/// Panics if any non-deleted folder has a child reference to a nonexistent ID.
 pub fn assert_structural_integrity(store: &BookmarkStore) {
-    // All children refs point to existing bookmark or folder IDs.
-    // This invariant always holds: ops never insert references to
-    // IDs that don't exist in the document.
     for (folder_id, folder) in &store.folders {
         if folder.deleted {
             continue;
@@ -83,6 +40,8 @@ pub fn assert_structural_integrity(store: &BookmarkStore) {
     }
 }
 
+/// # Panics
+/// Panics if any descendant of the deleted folder is not marked deleted.
 pub fn assert_cascade_complete(store: &BookmarkStore, deleted_folder_id: &str) {
     let folder = store
         .folders

@@ -15,6 +15,23 @@ fn commit_opts(message: String) -> CommitOptions {
         .with_time(now)
 }
 
+#[cfg(test)]
+fn assert_postconditions(doc_handle: &DocHandle) {
+    let store: crate::model::BookmarkStore =
+        doc_handle.with_doc(|doc| autosurgeon::hydrate(doc).unwrap());
+    crate::invariants::assert_valid_tree(&store);
+    crate::invariants::assert_structural_integrity(&store);
+}
+
+#[cfg(test)]
+fn assert_postconditions_with_cascade(doc_handle: &DocHandle, folder_id: &str) {
+    let store: crate::model::BookmarkStore =
+        doc_handle.with_doc(|doc| autosurgeon::hydrate(doc).unwrap());
+    crate::invariants::assert_valid_tree(&store);
+    crate::invariants::assert_structural_integrity(&store);
+    crate::invariants::assert_cascade_complete(&store, folder_id);
+}
+
 /// # Errors
 /// Returns an error if the document schema is invalid or the automerge transaction fails.
 pub fn add_bookmark(
@@ -61,6 +78,8 @@ pub fn add_bookmark(
         tx.commit_with(commit_opts(format!("add_bookmark:{id}")));
         Ok(())
     })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
     Ok(id)
 }
 
@@ -85,6 +104,8 @@ pub fn update_favicon(
         tx.commit_with(commit_opts(format!("update_favicon:{bookmark_id}")));
         Ok(())
     })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
     Ok(())
 }
 
@@ -117,6 +138,8 @@ pub fn create_folder(
         tx.commit_with(commit_opts(format!("create_folder:{id}")));
         Ok(())
     })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
     Ok(id)
 }
 
@@ -142,7 +165,10 @@ pub fn update_bookmark(
         schema::patch_bookmark(&mut tx, &bm, url, title, notes, None)?;
         tx.commit_with(commit_opts(format!("update_bookmark:{bookmark_id}")));
         Ok(())
-    })
+    })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
+    Ok(())
 }
 
 /// # Errors
@@ -187,7 +213,10 @@ pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> anyhow::Res
         }
         tx.commit_with(commit_opts(format!("delete_bookmark:{bookmark_id}")));
         Ok(())
-    })
+    })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
+    Ok(())
 }
 
 fn mark_descendants_deleted(
@@ -272,7 +301,10 @@ pub fn delete_folder(doc_handle: &DocHandle, folder_id: &str) -> anyhow::Result<
         }
         tx.commit_with(commit_opts(format!("delete_folder:{folder_id}")));
         Ok(())
-    })
+    })?;
+    #[cfg(test)]
+    assert_postconditions_with_cascade(doc_handle, folder_id);
+    Ok(())
 }
 
 /// # Errors
@@ -295,7 +327,10 @@ pub fn rename_folder(
         schema::patch_folder(&mut tx, &folder, new_title)?;
         tx.commit_with(commit_opts(format!("rename_folder:{folder_id}")));
         Ok(())
-    })
+    })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
+    Ok(())
 }
 
 /// # Errors
@@ -356,7 +391,10 @@ pub fn move_item(
         tx.insert(&to_children, to_len, item_id)?;
         tx.commit_with(commit_opts(format!("move_item:{item_id}")));
         Ok(())
-    })
+    })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
+    Ok(())
 }
 
 fn is_descendant_in_tx(
@@ -508,6 +546,8 @@ pub fn import_items(
         )));
         Ok(())
     })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
 
     Ok((bookmark_count, folder_count))
 }
@@ -566,7 +606,10 @@ pub fn revert_bookmark(
             "revert_bookmark:{bookmark_id}:{short_hash}"
         )));
         Ok(())
-    })
+    })?;
+    #[cfg(test)]
+    assert_postconditions(doc_handle);
+    Ok(())
 }
 
 #[cfg(test)]
