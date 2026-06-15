@@ -1491,6 +1491,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "mutants"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0287524726960e07b119cebd01678f852f147742ae0d925e6a520dca956126"
+
+[[package]]
 name = "mybriefcase-bookmarks"
 version = "0.0.1"
 dependencies = [
@@ -1536,6 +1542,7 @@ dependencies = [
  "chrono",
  "ego-tree",
  "hostname",
+ "mutants",
  "notify",
  "schemars",
  "scraper",

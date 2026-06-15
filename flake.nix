@@ -263,6 +263,7 @@
             cargo-deny
             cargo-edit
             cargo-llvm-cov
+            cargo-mutants
             cargo-watch
             rust-analyzer
             nodejs_22
