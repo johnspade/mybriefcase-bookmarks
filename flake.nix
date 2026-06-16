@@ -225,20 +225,21 @@
         validate = {
           type = "app";
           program = toString (pkgs.writeShellScript "validate" ''
-            set -euo pipefail
-            echo "==> Running Nix flake checks..."
-            nix flake check --keep-going
-            echo "==> Running Miri..."
-            nix run .#miri
-            echo "==> Running E2E tests..."
-            nix run .#e2e
-            echo "==> All validations passed!"
+            exec nix develop --command validate
           '');
         };
 
         validate-all = {
           type = "app";
           program = toString (pkgs.writeShellScript "validate-all" ''
+            exec nix develop --command validate-all
+          '');
+        };
+      });
+
+      devShells = forEachSupportedSystem ({ pkgs, ... }:
+        let
+          validate = pkgs.writeShellScriptBin "validate" ''
             set -euo pipefail
             echo "==> Running Nix flake checks..."
             nix flake check --keep-going
@@ -246,14 +247,32 @@
             nix run .#miri
             echo "==> Running E2E tests..."
             nix run .#e2e
+            echo "==> All validations passed!"
+          '';
+          validate-all = pkgs.writeShellScriptBin "validate-all" ''
+            set -euo pipefail
+            validate
+            echo "==> Running mutation testing (diff vs main)..."
+            git diff origin/main...HEAD > /tmp/mutants-diff.patch
+            if [ -s /tmp/mutants-diff.patch ]; then
+              cargo mutants --in-diff /tmp/mutants-diff.patch --in-place -vV --timeout 300
+            else
+              echo "    No diff vs main, skipping"
+            fi
             echo "==> Running Docker build + smoke test..."
             nix run .#docker-test
             echo "==> All validations passed!"
-          '');
-        };
-      });
-
-      devShells = forEachSupportedSystem ({ pkgs, ... }: {
+          '';
+          cargo-mutants-diff = pkgs.writeShellScriptBin "cargo-mutants-diff" ''
+            set -euo pipefail
+            git diff origin/main...HEAD > /tmp/mutants-diff.patch
+            if [ -s /tmp/mutants-diff.patch ]; then
+              cargo mutants --in-diff /tmp/mutants-diff.patch --in-place -vV --timeout 300
+            else
+              echo "No diff vs main, nothing to test"
+            fi
+          '';
+        in {
         default = pkgs.mkShell {
           packages = with pkgs; [
             rustToolchain
@@ -267,6 +286,9 @@
             cargo-watch
             rust-analyzer
             nodejs_22
+            validate
+            validate-all
+            cargo-mutants-diff
           ];
 
           env = {
