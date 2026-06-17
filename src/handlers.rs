@@ -1205,3 +1205,44 @@ pub async fn serve_favicon(
     )
         .into_response())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_timestamp_millis() {
+        let ts = 1_700_000_000_000; // millis
+        let result = format_timestamp(ts);
+        assert!(result.starts_with("2023-11-14"));
+    }
+
+    #[test]
+    fn format_timestamp_seconds() {
+        let ts = 1_700_000_000; // seconds
+        let result = format_timestamp(ts);
+        assert!(result.starts_with("2023-11-14"));
+    }
+
+    #[test]
+    fn format_timestamp_zero() {
+        let result = format_timestamp(0);
+        assert_eq!(result, "1970-01-01 00:00");
+    }
+
+    #[test]
+    fn format_timestamp_millis_vs_seconds_boundary() {
+        // Exactly at threshold: treated as millis, divided by 1000
+        let ts_millis = 1_000_000_000_001;
+        let ts_secs = 1_000_000_000;
+        assert_eq!(format_timestamp(ts_millis), format_timestamp(ts_secs));
+    }
+
+    #[test]
+    fn format_timestamp_just_below_threshold_treated_as_seconds() {
+        // 999_999_999_999 is below the threshold, treated as seconds (year ~33658)
+        let ts = 999_999_999;
+        let result = format_timestamp(ts);
+        assert_eq!(result, "2001-09-09 01:46");
+    }
+}
