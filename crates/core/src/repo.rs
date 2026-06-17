@@ -31,6 +31,7 @@ pub async fn init_repo(
     let sync_info_path = sync_root.join(".bookmarks-sync");
 
     if sync_info_path.exists() {
+        // Existing sync folder. Try loading from local storage first.
         let raw = std::fs::read_to_string(&sync_info_path)?;
         let info: serde_json::Value =
             serde_json::from_str(&raw).map_err(|e| CoreError::DocumentCorrupted(e.to_string()))?;
@@ -50,11 +51,13 @@ pub async fn init_repo(
             return Ok((repo_handle, handle, doc_id));
         }
 
+        // Not in local storage: create a new doc and merge from peers.
         let handle = repo_handle.new_document();
         full_merge_pass(&handle, sync_root, client_id);
         let actual_id = handle.document_id();
         Ok((repo_handle, handle, actual_id))
     } else {
+        // First client: create document with default folder structure.
         let handle = repo_handle.new_document();
         handle.with_doc_mut(|doc| {
             let mut tx = doc.transaction();
