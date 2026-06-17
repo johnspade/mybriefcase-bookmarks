@@ -463,5 +463,82 @@ async fn revert_invalid_hash_400() {
     )
     .await
     .0;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+// ─── RFC 9457 Problem Details tests ────────────────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn api_not_found_returns_problem_json() {
+    let (app, _) = make_app();
+
+    let resp = app
+        .oneshot(
+            Request::get("/folders/nonexistent-id")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        resp.headers().get("content-type").unwrap(),
+        "application/problem+json"
+    );
+
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["type"], "urn:mybriefcase:error:not-found");
+    assert_eq!(json["status"], 404);
+    assert_eq!(json["title"], "Not Found");
+    assert!(!json["detail"].as_str().unwrap().is_empty());
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn api_validation_error_returns_problem_json() {
+    let (app, root_id) = make_app();
+
+    let (_, resp) = post_json(
+        app.clone(),
+        "/folders",
+        serde_json::json!({
+            "parent_folder_id": root_id,
+            "title": "Folder"
+        }),
+    )
+    .await;
+    let folder_id = resp["id"].as_str().unwrap().to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/move")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "item_id": folder_id,
+                        "from_folder_id": root_id,
+                        "to_folder_id": folder_id,
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        resp.headers().get("content-type").unwrap(),
+        "application/problem+json"
+    );
+
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["type"], "urn:mybriefcase:error:validation");
+    assert_eq!(json["status"], 422);
+    assert_eq!(json["title"], "Validation Error");
+    assert!(json["detail"].as_str().unwrap().contains("itself"));
 }

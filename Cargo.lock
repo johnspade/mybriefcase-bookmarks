@@ -1551,7 +1551,6 @@ dependencies = [
 name = "mybriefcase-bookmarks-core"
 version = "0.0.1"
 dependencies = [
- "anyhow",
  "automerge",
  "automerge_repo",
  "autosurgeon",
@@ -1567,6 +1566,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "uuid",
 ]

@@ -283,6 +283,7 @@
             cargo-edit
             cargo-llvm-cov
             cargo-mutants
+            cargo-nextest
             cargo-watch
             rust-analyzer
             nodejs_22

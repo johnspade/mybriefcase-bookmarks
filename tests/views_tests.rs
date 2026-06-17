@@ -14,7 +14,7 @@ use tower::ServiceExt;
 
 use common::new_initialized_doc;
 use mybriefcase_bookmarks::views::SortOrder;
-use mybriefcase_bookmarks::{handlers, ops, state};
+use mybriefcase_bookmarks::{handlers, history, ops, state};
 
 fn build_views_app() -> (Router, String) {
     let td = new_initialized_doc("test-views");
@@ -1450,4 +1450,104 @@ async fn folder_content_htmx_include_references_existing_id() {
             "hx-include '{include_sel}' must reference an existing element"
         );
     }
+}
+
+// ─── Mutation side-effect tests (kill escaped mutants) ─────
+
+fn build_views_app_with_sync_root() -> (
+    Router,
+    String,
+    automerge_repo::DocHandle,
+    std::path::PathBuf,
+) {
+    let td = new_initialized_doc("test-views");
+    let root_id = td.root_folder_id.clone();
+    let doc_handle = td.doc_handle.clone();
+    let sync_root = tempfile::TempDir::new().unwrap();
+    let sync_root_path = sync_root.path().to_path_buf();
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let state = Arc::new(state::AppState {
+        doc_handle: td.doc_handle,
+        sync_root: sync_root_path.clone(),
+        client_id: "test-views".to_string(),
+        sse_tx,
+        static_version: "test".to_string(),
+    });
+    let app = Router::new()
+        .route("/folders/{id}/content", get(handlers::folder_content))
+        .route("/folders/{id}/rename", post(handlers::rename_folder_html))
+        .route("/bookmarks/{id}/detail", get(handlers::bookmark_detail))
+        .route("/bookmarks/{id}/edit", post(handlers::update_bookmark_html))
+        .route(
+            "/bookmarks/{id}/revert",
+            post(handlers::revert_bookmark_html),
+        )
+        .route("/bookmarks/new", post(handlers::create_bookmark_html))
+        .with_state(state);
+    std::mem::forget(td.temp_dir);
+    std::mem::forget(sync_root);
+    (app, root_id, doc_handle, sync_root_path)
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn revert_bookmark_html_restores_previous_state() {
+    let (app, root_id, doc_handle, _) = build_views_app_with_sync_root();
+    let bm_id =
+        ops::add_bookmark(&doc_handle, &root_id, "https://example.com", "Original").unwrap();
+    ops::update_bookmark(
+        &doc_handle,
+        &bm_id,
+        Some("https://example.com"),
+        Some("Changed"),
+        None,
+    )
+    .unwrap();
+
+    let entries = history::bookmark_history(&doc_handle, &bm_id);
+    let v1_hash = &entries.last().unwrap().hash;
+
+    let body = format!("target_hash={v1_hash}");
+    let resp = app
+        .oneshot(
+            Request::post(format!("/bookmarks/{bm_id}/revert"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc_handle.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let bm = store.bookmarks.get(&bm_id).unwrap();
+    assert_eq!(bm.title, "Original", "bookmark should be reverted");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn after_write_exports_to_sync_root() {
+    let (app, root_id, _, sync_root_path) = build_views_app_with_sync_root();
+
+    let body = format!("folder_id={root_id}&url=https%3A%2F%2Fexample.com&title=ExportTest");
+    let resp = app
+        .oneshot(
+            Request::post("/bookmarks/new")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let snapshot = sync_root_path
+        .join("test-views")
+        .join("store")
+        .join("document.snapshot");
+    assert!(
+        snapshot.exists(),
+        "after_write should export the document to sync_root"
+    );
 }

@@ -12,7 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 mutants = "0.0.3"
-anyhow = "1.0.79"
+thiserror = "2"
 automerge = "0.7"
 automerge_repo = { version = "0.3", features = ["tokio"] }
 autosurgeon = { version = "0.9", features = ["uuid"] }

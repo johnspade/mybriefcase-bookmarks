@@ -13,8 +13,9 @@ fn allowed_deps() -> HashMap<&'static str, Vec<&'static str>> {
     HashMap::from([
         ("model", vec![]),
         ("schema", vec![]),
-        ("ops", vec!["schema", "import"]),
-        ("repo", vec!["schema"]),
+        ("error", vec![]),
+        ("ops", vec!["error", "schema", "import"]),
+        ("repo", vec!["error", "schema"]),
         ("history", vec!["schema", "ops"]),
         ("export", vec!["model"]),
         ("import", vec![]),
