@@ -4,43 +4,57 @@ use automerge_repo::tokio::FsStorage;
 use automerge_repo::{DocHandle, DocumentId, Repo, RepoHandle};
 use std::path::Path;
 
+use crate::error::CoreError;
 use crate::schema::BookmarkField::Deleted;
 use crate::schema::BookmarkStoreField::{Bookmarks, Folders, Meta, RootFolderId};
 use crate::schema::FolderField::{Children, CreatedAt, Title, UpdatedAt};
 use crate::schema::StoreMetaField::{CollectionName, SchemaVersion};
 
+/// # Errors
+/// Returns `CoreError::Io` if filesystem operations fail, or `CoreError::DocumentCorrupted`
+/// if the sync metadata file cannot be parsed.
+///
 /// # Panics
-/// Panics if the local storage cannot be initialized or the document cannot be loaded.
+/// Panics if in-memory automerge transaction operations fail during initial schema creation.
 pub async fn init_repo(
     local_data_dir: &Path,
     sync_root: &Path,
     client_id: &str,
-) -> (RepoHandle, DocHandle, DocumentId) {
+) -> Result<(RepoHandle, DocHandle, DocumentId), CoreError> {
     let local_store_path = local_data_dir.join("repo_store");
-    std::fs::create_dir_all(&local_store_path).unwrap();
-    let store = FsStorage::open(&local_store_path).unwrap();
+    std::fs::create_dir_all(&local_store_path)?;
+    let store = FsStorage::open(&local_store_path)
+        .map_err(|e| CoreError::Io(std::io::Error::other(format!("{e:?}"))))?;
     let repo = Repo::new(Some(client_id.to_string()), Box::new(store));
     let repo_handle = repo.run();
 
     let sync_info_path = sync_root.join(".bookmarks-sync");
 
     if sync_info_path.exists() {
-        // Existing sync folder. Try loading from local storage first.
+        let raw = std::fs::read_to_string(&sync_info_path)?;
         let info: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&sync_info_path).unwrap()).unwrap();
-        let doc_id: DocumentId = info["document_id"].as_str().unwrap().parse().unwrap();
+            serde_json::from_str(&raw).map_err(|e| CoreError::DocumentCorrupted(e.to_string()))?;
+        let doc_id: DocumentId = info["document_id"]
+            .as_str()
+            .ok_or_else(|| {
+                CoreError::DocumentCorrupted("missing document_id in sync metadata".into())
+            })?
+            .parse()
+            .map_err(|_| CoreError::DocumentCorrupted("invalid document_id format".into()))?;
 
-        if let Some(handle) = repo_handle.load(doc_id.clone()).await.unwrap() {
-            return (repo_handle, handle, doc_id);
+        if let Some(handle) = repo_handle
+            .load(doc_id.clone())
+            .await
+            .map_err(|e| CoreError::Io(std::io::Error::other(format!("{e:?}"))))?
+        {
+            return Ok((repo_handle, handle, doc_id));
         }
 
-        // Not in local storage: create a new doc and merge from peers.
         let handle = repo_handle.new_document();
         full_merge_pass(&handle, sync_root, client_id);
         let actual_id = handle.document_id();
-        (repo_handle, handle, actual_id)
+        Ok((repo_handle, handle, actual_id))
     } else {
-        // First client: create document with default folder structure.
         let handle = repo_handle.new_document();
         handle.with_doc_mut(|doc| {
             let mut tx = doc.transaction();
@@ -95,9 +109,9 @@ pub async fn init_repo(
             "schema_version": 1,
             "document_id": doc_id.to_string()
         });
-        std::fs::create_dir_all(sync_root).unwrap();
-        std::fs::write(&sync_info_path, info.to_string()).unwrap();
-        (repo_handle, handle, doc_id)
+        std::fs::create_dir_all(sync_root)?;
+        std::fs::write(&sync_info_path, info.to_string())?;
+        Ok((repo_handle, handle, doc_id))
     }
 }
 
@@ -139,15 +153,22 @@ pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: 
     changed
 }
 
-pub fn export_doc_to_shared(doc_handle: &DocHandle, sync_root: &Path, client_id: &str) {
+/// # Errors
+/// Returns `CoreError::Io` if the export directory cannot be created or the file cannot be written.
+pub fn export_doc_to_shared(
+    doc_handle: &DocHandle,
+    sync_root: &Path,
+    client_id: &str,
+) -> Result<(), CoreError> {
     let shared = sync_root.join(client_id).join("store");
-    std::fs::create_dir_all(&shared).ok();
+    std::fs::create_dir_all(&shared)?;
 
     let data = doc_handle.with_doc(automerge::Automerge::save);
     let dest = shared.join("document.snapshot");
     let tmp = dest.with_extension("tmp");
-    std::fs::write(&tmp, &data).ok();
-    std::fs::rename(&tmp, &dest).ok();
+    std::fs::write(&tmp, &data)?;
+    std::fs::rename(&tmp, &dest)?;
+    Ok(())
 }
 
 fn walk_files(dir: &Path) -> Vec<std::path::PathBuf> {

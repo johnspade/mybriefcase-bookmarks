@@ -1,3 +1,4 @@
+pub use mybriefcase_bookmarks_core::error;
 pub use mybriefcase_bookmarks_core::export;
 pub use mybriefcase_bookmarks_core::history;
 pub use mybriefcase_bookmarks_core::identity;

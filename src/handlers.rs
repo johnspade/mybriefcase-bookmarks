@@ -6,6 +6,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
+use mybriefcase_bookmarks_core::error::CoreError;
 use serde::Deserialize;
 use std::convert::Infallible;
 use std::fmt::Write as FmtWrite;
@@ -23,6 +24,16 @@ use crate::views::{
     build_folder_items, build_sidebar_html, date_short, domain_color, domain_letter, html_escape,
     sort_items,
 };
+
+const fn core_error_to_status(e: &CoreError) -> StatusCode {
+    match e {
+        CoreError::NotFound(_) => StatusCode::NOT_FOUND,
+        CoreError::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
+        CoreError::DocumentCorrupted(_) | CoreError::Automerge(_) | CoreError::Io(_) => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
 
 // ─── Form data ──────────────────────────────────────
 
@@ -530,7 +541,7 @@ pub async fn create_folder_html(
 ) -> Result<Html<String>, StatusCode> {
     state
         .mutate(|doc| ops::create_folder(doc, &form.parent_folder_id, &form.title))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| core_error_to_status(&e))?;
     render_folder_response(&state, &form.parent_folder_id, true, SortOrder::default())
 }
 
@@ -542,7 +553,7 @@ pub async fn create_bookmark_html(
 ) -> Result<Html<String>, StatusCode> {
     let id = state
         .mutate(|doc| ops::add_bookmark(doc, &form.folder_id, &form.url, &form.title))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| core_error_to_status(&e))?;
 
     if !form.favicon_url.is_empty() && !form.favicon_url.starts_with("data:") {
         let sync_root = state.sync_root.clone();
@@ -569,7 +580,7 @@ pub async fn create_bookmark_html(
                 for bm_id in &ids_to_update {
                     let _ = ops::update_favicon(&doc_handle, bm_id, &filename);
                 }
-                crate::repo::export_doc_to_shared(&doc_handle, &sync_root, &client_id);
+                let _ = crate::repo::export_doc_to_shared(&doc_handle, &sync_root, &client_id);
                 let _ = sse_tx.send(());
             }
         });
@@ -598,8 +609,10 @@ pub async fn update_bookmark_html(
             if let Some(ref favicon) = form.favicon {
                 ops::update_favicon(doc, &id, favicon)?;
                 if !favicon.is_empty() {
-                    let store: BookmarkStore =
-                        doc.with_doc(|d| autosurgeon::hydrate(d).map_err(anyhow::Error::from))?;
+                    let store: BookmarkStore = doc.with_doc(|d| {
+                        autosurgeon::hydrate(d)
+                            .map_err(|e| CoreError::DocumentCorrupted(e.to_string()))
+                    })?;
                     if let Some(bm) = store.bookmarks.get(&id) {
                         let url = bm.url.clone();
                         for (other_id, other_bm) in &store.bookmarks {
@@ -612,8 +625,9 @@ pub async fn update_bookmark_html(
             }
 
             if let Some(ref new_folder_id) = form.folder_id {
-                let store: BookmarkStore =
-                    doc.with_doc(|d| autosurgeon::hydrate(d).map_err(anyhow::Error::from))?;
+                let store: BookmarkStore = doc.with_doc(|d| {
+                    autosurgeon::hydrate(d).map_err(|e| CoreError::DocumentCorrupted(e.to_string()))
+                })?;
                 let current_folder_id = find_folder_for_bookmark(&store, &id)
                     .unwrap_or(&store.root_folder_id)
                     .to_string();
@@ -623,7 +637,7 @@ pub async fn update_bookmark_html(
             }
             Ok(())
         })
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| core_error_to_status(&e))?;
 
     let store = read_store(&state.doc_handle)?;
     let Some(bm) = store.bookmarks.get(&id) else {
@@ -719,8 +733,7 @@ pub async fn fetch_favicon_html(
         }
     };
 
-    ops::update_favicon(&state.doc_handle, &id, &filename)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    ops::update_favicon(&state.doc_handle, &id, &filename).map_err(|e| core_error_to_status(&e))?;
 
     let template = FaviconPreviewTemplate {
         favicon: filename,
@@ -740,7 +753,7 @@ pub async fn delete_bookmark_html(
 ) -> Result<Html<String>, StatusCode> {
     state
         .mutate(|doc| ops::delete_bookmark(doc, &id))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| core_error_to_status(&e))?;
     render_folder_response(&state, &form.current_folder_id, true, SortOrder::default())
 }
 
@@ -753,7 +766,7 @@ pub async fn delete_folder_html(
 ) -> Result<Html<String>, StatusCode> {
     state
         .mutate(|doc| ops::delete_folder(doc, &id))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| core_error_to_status(&e))?;
     let target = if form.current_folder_id == id {
         let store = read_store(&state.doc_handle)?;
         store.root_folder_id
@@ -772,7 +785,7 @@ pub async fn rename_folder_html(
 ) -> Result<Html<String>, StatusCode> {
     state
         .mutate(|doc| ops::rename_folder(doc, &id, &form.title))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| core_error_to_status(&e))?;
     render_folder_response(&state, &form.current_folder_id, true, SortOrder::default())
 }
 
@@ -785,14 +798,7 @@ pub async fn move_item_html(
 ) -> Result<Html<String>, StatusCode> {
     state
         .mutate(|doc| ops::move_item(doc, &form.item, &form.source, &form.destination))
-        .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("cycle") || msg.contains("itself") || msg.contains("subtree") {
-                StatusCode::UNPROCESSABLE_ENTITY
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-        })?;
+        .map_err(|e| core_error_to_status(&e))?;
     render_folder_response(&state, &form.destination, true, SortOrder::default())
 }
 
@@ -1053,7 +1059,7 @@ pub async fn revert_bookmark_html(
     let hash = history::parse_change_hash(&form.target_hash).ok_or(StatusCode::BAD_REQUEST)?;
     state
         .mutate(|doc| ops::revert_bookmark(doc, &id, &hash))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| core_error_to_status(&e))?;
 
     let store = read_store(&state.doc_handle)?;
     let Some(bm) = store.bookmarks.get(&id) else {
@@ -1153,7 +1159,7 @@ pub async fn import_bookmarks_html(
             ops::import_items(doc, &folder_id, &items)?;
             Ok(folder_id)
         })
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| core_error_to_status(&e))?;
 
     render_folder_response(&state, &target_folder_id, true, SortOrder::default())
 }

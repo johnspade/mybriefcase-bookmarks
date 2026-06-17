@@ -192,10 +192,13 @@ async fn main() {
     eprintln!("Local data: {}", cfg.local_data_dir.display());
 
     let (_repo_handle, doc_handle, _document_id) =
-        repo::init_repo(&cfg.local_data_dir, &cfg.sync_root, &client_id).await;
+        repo::init_repo(&cfg.local_data_dir, &cfg.sync_root, &client_id)
+            .await
+            .expect("failed to initialize repository");
 
     repo::full_merge_pass(&doc_handle, &cfg.sync_root, &client_id);
-    repo::export_doc_to_shared(&doc_handle, &cfg.sync_root, &client_id);
+    repo::export_doc_to_shared(&doc_handle, &cfg.sync_root, &client_id)
+        .expect("failed to export document");
     write_peer_info(&cfg.sync_root, &client_id);
 
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);

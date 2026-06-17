@@ -1,8 +1,8 @@
-use anyhow::Context;
 use automerge::transaction::{CommitOptions, Transactable};
 use automerge::{ObjType, ReadDoc};
 use automerge_repo::DocHandle;
 
+use crate::error::CoreError;
 use crate::schema;
 use crate::schema::BookmarkField::{Deleted, UpdatedAt};
 use crate::schema::BookmarkStoreField::{Bookmarks, Folders};
@@ -20,8 +20,8 @@ fn commit_opts(message: String) -> CommitOptions {
 /// invariant checking automatically.
 fn with_doc_mut_checked<R>(
     doc_handle: &DocHandle,
-    f: impl FnOnce(&mut automerge::Automerge) -> anyhow::Result<R>,
-) -> anyhow::Result<R> {
+    f: impl FnOnce(&mut automerge::Automerge) -> Result<R, CoreError>,
+) -> Result<R, CoreError> {
     let result = doc_handle.with_doc_mut(f)?;
     #[cfg(test)]
     {
@@ -38,8 +38,8 @@ fn with_doc_mut_checked<R>(
 fn with_doc_mut_checked_cascade(
     doc_handle: &DocHandle,
     _folder_id: &str,
-    f: impl FnOnce(&mut automerge::Automerge) -> anyhow::Result<()>,
-) -> anyhow::Result<()> {
+    f: impl FnOnce(&mut automerge::Automerge) -> Result<(), CoreError>,
+) -> Result<(), CoreError> {
     doc_handle.with_doc_mut(f)?;
     #[cfg(test)]
     {
@@ -59,14 +59,14 @@ pub fn add_bookmark(
     folder_id: &str,
     url: &str,
     title: &str,
-) -> anyhow::Result<String> {
+) -> Result<String, CoreError> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
-            .context("missing bookmarks map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing bookmarks map".into()))?
             .1;
         let bm = tx.put_object(&bookmarks, id.as_str(), ObjType::Map)?;
         schema::write_bookmark(
@@ -83,15 +83,15 @@ pub fn add_bookmark(
         )?;
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
-            .context("missing folders map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing folders map".into()))?
             .1;
         let folder = tx
             .get(&folders, folder_id)?
-            .with_context(|| format!("folder not found: {folder_id}"))?
+            .ok_or_else(|| CoreError::NotFound(format!("folder not found: {folder_id}")))?
             .1;
         let children = tx
             .get(&folder, Children.as_ref())?
-            .context("folder missing children")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("folder missing children".into()))?
             .1;
         let len = tx.length(&children);
         tx.insert(&children, len, id.as_str())?;
@@ -107,16 +107,16 @@ pub fn update_favicon(
     doc_handle: &DocHandle,
     bookmark_id: &str,
     favicon: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), CoreError> {
     with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
-            .context("missing bookmarks map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing bookmarks map".into()))?
             .1;
         let bm = tx
             .get(&bookmarks, bookmark_id)?
-            .with_context(|| format!("bookmark not found: {bookmark_id}"))?
+            .ok_or_else(|| CoreError::NotFound(format!("bookmark not found: {bookmark_id}")))?
             .1;
         schema::patch_bookmark(&mut tx, &bm, None, None, None, Some(favicon))?;
         tx.commit_with(commit_opts(format!("update_favicon:{bookmark_id}")));
@@ -130,24 +130,26 @@ pub fn create_folder(
     doc_handle: &DocHandle,
     parent_folder_id: &str,
     title: &str,
-) -> anyhow::Result<String> {
+) -> Result<String, CoreError> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
-            .context("missing folders map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing folders map".into()))?
             .1;
         let f = tx.put_object(&folders, id.as_str(), ObjType::Map)?;
         schema::write_folder(&mut tx, &f, title, &now, &now)?;
         let parent = tx
             .get(&folders, parent_folder_id)?
-            .with_context(|| format!("parent folder not found: {parent_folder_id}"))?
+            .ok_or_else(|| {
+                CoreError::NotFound(format!("parent folder not found: {parent_folder_id}"))
+            })?
             .1;
         let ch = tx
             .get(&parent, Children.as_ref())?
-            .context("parent missing children")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("parent missing children".into()))?
             .1;
         tx.insert(&ch, tx.length(&ch), id.as_str())?;
         tx.commit_with(commit_opts(format!("create_folder:{id}")));
@@ -164,16 +166,16 @@ pub fn update_bookmark(
     url: Option<&str>,
     title: Option<&str>,
     notes: Option<&str>,
-) -> anyhow::Result<()> {
+) -> Result<(), CoreError> {
     with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
-            .context("missing bookmarks map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing bookmarks map".into()))?
             .1;
         let bm = tx
             .get(&bookmarks, bookmark_id)?
-            .with_context(|| format!("bookmark not found: {bookmark_id}"))?
+            .ok_or_else(|| CoreError::NotFound(format!("bookmark not found: {bookmark_id}")))?
             .1;
         schema::patch_bookmark(&mut tx, &bm, url, title, notes, None)?;
         tx.commit_with(commit_opts(format!("update_bookmark:{bookmark_id}")));
@@ -183,34 +185,36 @@ pub fn update_bookmark(
 
 /// # Errors
 /// Returns an error if the document schema is invalid or the automerge transaction fails.
-pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> anyhow::Result<()> {
+pub fn delete_bookmark(doc_handle: &DocHandle, bookmark_id: &str) -> Result<(), CoreError> {
     let now = chrono::Utc::now().to_rfc3339();
     with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
-            .context("missing bookmarks map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing bookmarks map".into()))?
             .1;
         let bm = tx
             .get(&bookmarks, bookmark_id)?
-            .with_context(|| format!("bookmark not found: {bookmark_id}"))?
+            .ok_or_else(|| CoreError::NotFound(format!("bookmark not found: {bookmark_id}")))?
             .1;
         tx.put(&bm, Deleted.as_ref(), true)?;
         tx.put(&bm, UpdatedAt.as_ref(), now.as_str())?;
 
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
-            .context("missing folders map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing folders map".into()))?
             .1;
         let folder_keys = tx.keys(&folders).collect::<Vec<_>>();
         for folder_key in folder_keys {
             let folder_obj = tx
                 .get(&folders, folder_key.as_str())?
-                .with_context(|| format!("folder not found: {folder_key}"))?
+                .ok_or_else(|| {
+                    CoreError::DocumentCorrupted(format!("folder not found: {folder_key}"))
+                })?
                 .1;
             let children = tx
                 .get(&folder_obj, Children.as_ref())?
-                .context("folder missing children")?
+                .ok_or_else(|| CoreError::DocumentCorrupted("folder missing children".into()))?
                 .1;
             let len = tx.length(&children);
             for i in (0..len).rev() {
@@ -232,7 +236,7 @@ fn mark_descendants_deleted(
     bookmarks: &automerge::ObjId,
     root_folder_id: &str,
     now: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), CoreError> {
     let mut stack = vec![root_folder_id.to_string()];
     let mut visited = std::collections::HashSet::new();
 
@@ -249,7 +253,7 @@ fn mark_descendants_deleted(
 
         let children = tx
             .get(&folder, Children.as_ref())?
-            .context("folder missing children")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("folder missing children".into()))?
             .1;
         let len = tx.length(&children);
         for i in 0..len {
@@ -272,17 +276,17 @@ fn mark_descendants_deleted(
 
 /// # Errors
 /// Returns an error if the document schema is invalid or the automerge transaction fails.
-pub fn delete_folder(doc_handle: &DocHandle, folder_id: &str) -> anyhow::Result<()> {
+pub fn delete_folder(doc_handle: &DocHandle, folder_id: &str) -> Result<(), CoreError> {
     let now = chrono::Utc::now().to_rfc3339();
     with_doc_mut_checked_cascade(doc_handle, folder_id, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
-            .context("missing folders map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing folders map".into()))?
             .1;
         let bookmarks = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
-            .context("missing bookmarks map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing bookmarks map".into()))?
             .1;
 
         mark_descendants_deleted(&mut tx, &folders, &bookmarks, folder_id, &now)?;
@@ -291,11 +295,11 @@ pub fn delete_folder(doc_handle: &DocHandle, folder_id: &str) -> anyhow::Result<
         for key in folder_keys {
             let f = tx
                 .get(&folders, key.as_str())?
-                .with_context(|| format!("folder not found: {key}"))?
+                .ok_or_else(|| CoreError::DocumentCorrupted(format!("folder not found: {key}")))?
                 .1;
             let children = tx
                 .get(&f, Children.as_ref())?
-                .context("folder missing children")?
+                .ok_or_else(|| CoreError::DocumentCorrupted("folder missing children".into()))?
                 .1;
             let len = tx.length(&children);
             for i in (0..len).rev() {
@@ -317,16 +321,16 @@ pub fn rename_folder(
     doc_handle: &DocHandle,
     folder_id: &str,
     new_title: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), CoreError> {
     with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
-            .context("missing folders map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing folders map".into()))?
             .1;
         let folder = tx
             .get(&folders, folder_id)?
-            .with_context(|| format!("folder not found: {folder_id}"))?
+            .ok_or_else(|| CoreError::NotFound(format!("folder not found: {folder_id}")))?
             .1;
         schema::patch_folder(&mut tx, &folder, new_title)?;
         tx.commit_with(commit_opts(format!("rename_folder:{folder_id}")));
@@ -342,33 +346,40 @@ pub fn move_item(
     item_id: &str,
     from_folder_id: &str,
     to_folder_id: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), CoreError> {
     if from_folder_id == to_folder_id {
         return Ok(());
     }
-    anyhow::ensure!(item_id != to_folder_id, "cannot move a folder into itself");
+    if item_id == to_folder_id {
+        return Err(CoreError::Validation(
+            "cannot move a folder into itself".into(),
+        ));
+    }
 
     with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
-            .context("missing folders map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing folders map".into()))?
             .1;
 
         if tx.get(&folders, item_id)?.is_some() {
-            anyhow::ensure!(
-                !is_descendant_in_tx(&tx, &folders, item_id, to_folder_id),
-                "cannot move a folder into its own subtree"
-            );
+            if is_descendant_in_tx(&tx, &folders, item_id, to_folder_id) {
+                return Err(CoreError::Validation(
+                    "cannot move a folder into its own subtree".into(),
+                ));
+            }
         }
 
         let from_folder = tx
             .get(&folders, from_folder_id)?
-            .with_context(|| format!("source folder not found: {from_folder_id}"))?
+            .ok_or_else(|| {
+                CoreError::NotFound(format!("source folder not found: {from_folder_id}"))
+            })?
             .1;
         let from_children = tx
             .get(&from_folder, Children.as_ref())?
-            .context("source folder missing children")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("source folder missing children".into()))?
             .1;
         let from_len = tx.length(&from_children);
         for i in (0..from_len).rev() {
@@ -382,11 +393,15 @@ pub fn move_item(
 
         let to_folder = tx
             .get(&folders, to_folder_id)?
-            .with_context(|| format!("destination folder not found: {to_folder_id}"))?
+            .ok_or_else(|| {
+                CoreError::NotFound(format!("destination folder not found: {to_folder_id}"))
+            })?
             .1;
         let to_children = tx
             .get(&to_folder, Children.as_ref())?
-            .context("destination folder missing children")?
+            .ok_or_else(|| {
+                CoreError::DocumentCorrupted("destination folder missing children".into())
+            })?
             .1;
         let to_len = tx.length(&to_children);
         tx.insert(&to_children, to_len, item_id)?;
@@ -439,14 +454,14 @@ fn insert_items_recursive(
     items: &[crate::import::ImportedItem],
     bc: &mut usize,
     fc: &mut usize,
-) -> anyhow::Result<()> {
+) -> Result<(), CoreError> {
     let parent = tx
         .get(folders, parent_id)?
-        .with_context(|| format!("folder not found: {parent_id}"))?
+        .ok_or_else(|| CoreError::NotFound(format!("folder not found: {parent_id}")))?
         .1;
     let children = tx
         .get(&parent, Children.as_ref())?
-        .context("folder missing children")?
+        .ok_or_else(|| CoreError::DocumentCorrupted("folder missing children".into()))?
         .1;
 
     for item in items {
@@ -514,7 +529,7 @@ pub fn import_items(
     doc_handle: &DocHandle,
     parent_folder_id: &str,
     items: &[crate::import::ImportedItem],
-) -> anyhow::Result<(usize, usize)> {
+) -> Result<(usize, usize), CoreError> {
     let mut bookmark_count = 0usize;
     let mut folder_count = 0usize;
 
@@ -522,11 +537,11 @@ pub fn import_items(
         let mut tx = doc.transaction();
         let folders = tx
             .get(automerge::ROOT, Folders.as_ref())?
-            .context("missing folders map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing folders map".into()))?
             .1;
         let bookmarks_map = tx
             .get(automerge::ROOT, Bookmarks.as_ref())?
-            .context("missing bookmarks map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing bookmarks map".into()))?
             .1;
 
         insert_items_recursive(
@@ -557,18 +572,18 @@ pub fn revert_bookmark(
     doc_handle: &DocHandle,
     bookmark_id: &str,
     target_hash: &automerge::ChangeHash,
-) -> anyhow::Result<()> {
+) -> Result<(), CoreError> {
     use crate::schema::BookmarkField::{Favicon, Notes, Title, Url};
     with_doc_mut_checked(doc_handle, |doc| {
         let target_heads = &[*target_hash];
 
         let bookmarks_obj = doc
             .get(automerge::ROOT, Bookmarks.as_ref())?
-            .context("missing bookmarks map")?
+            .ok_or_else(|| CoreError::DocumentCorrupted("missing bookmarks map".into()))?
             .1;
         let bm_obj = doc
             .get(&bookmarks_obj, bookmark_id)?
-            .with_context(|| format!("bookmark not found: {bookmark_id}"))?
+            .ok_or_else(|| CoreError::NotFound(format!("bookmark not found: {bookmark_id}")))?
             .1;
 
         let old_url = doc
@@ -900,5 +915,47 @@ mod tests {
         }];
         let result = import_items(&doc, "nonexistent-id", &items);
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_not_found_variant_for_missing_folder() {
+        let (doc, _tmp) = setup_repo();
+        let err = add_bookmark(&doc, "nonexistent-id", "https://x.com", "X").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound(_)));
+        assert!(err.to_string().contains("folder not found"));
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_not_found_variant_for_missing_bookmark() {
+        let (doc, _tmp) = setup_repo();
+        let err =
+            update_bookmark(&doc, "nonexistent-id", Some("https://x.com"), None, None).unwrap_err();
+        assert!(matches!(err, CoreError::NotFound(_)));
+        assert!(err.to_string().contains("bookmark not found"));
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_validation_variant_for_cycle() {
+        let (doc, _tmp) = setup_repo();
+        let store = read_store(&doc);
+        let root_id = store.root_folder_id;
+        let folder = create_folder(&doc, &root_id, "F").unwrap();
+        let err = move_item(&doc, &folder, &root_id, &folder).unwrap_err();
+        assert!(matches!(err, CoreError::Validation(_)));
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn test_validation_variant_for_subtree_move() {
+        let (doc, _tmp) = setup_repo();
+        let store = read_store(&doc);
+        let root_id = store.root_folder_id;
+        let parent = create_folder(&doc, &root_id, "Parent").unwrap();
+        let child = create_folder(&doc, &parent, "Child").unwrap();
+        let err = move_item(&doc, &parent, &root_id, &child).unwrap_err();
+        assert!(matches!(err, CoreError::Validation(_)));
     }
 }

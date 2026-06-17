@@ -1,3 +1,4 @@
+pub mod error;
 pub mod export;
 pub mod history;
 pub mod identity;

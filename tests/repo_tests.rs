@@ -22,7 +22,7 @@ async fn export_creates_snapshot() {
     let td = new_initialized_doc("client-a");
     let sync_root = TempDir::new().unwrap();
 
-    repo::export_doc_to_shared(&td.doc_handle, sync_root.path(), "client-a");
+    repo::export_doc_to_shared(&td.doc_handle, sync_root.path(), "client-a").unwrap();
 
     let snapshot = sync_root
         .path()
@@ -39,7 +39,7 @@ async fn export_no_tmp_file_remains() {
     let td = new_initialized_doc("client-a");
     let sync_root = TempDir::new().unwrap();
 
-    repo::export_doc_to_shared(&td.doc_handle, sync_root.path(), "client-a");
+    repo::export_doc_to_shared(&td.doc_handle, sync_root.path(), "client-a").unwrap();
 
     let store_dir = sync_root.path().join("client-a").join("store");
     for entry in std::fs::read_dir(&store_dir).unwrap() {
@@ -66,7 +66,7 @@ async fn full_merge_pass_loads_peers() {
     );
 
     let sync_root = TempDir::new().unwrap();
-    repo::export_doc_to_shared(&peer_a.doc_handle, sync_root.path(), "peer-a");
+    repo::export_doc_to_shared(&peer_a.doc_handle, sync_root.path(), "peer-a").unwrap();
 
     let local = fork_doc(&base, "local");
     let changed = repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local");
@@ -91,7 +91,7 @@ async fn full_merge_pass_skips_own_dir() {
     );
 
     let sync_root = TempDir::new().unwrap();
-    repo::export_doc_to_shared(&base.doc_handle, sync_root.path(), "my-client");
+    repo::export_doc_to_shared(&base.doc_handle, sync_root.path(), "my-client").unwrap();
 
     let fresh = fork_doc(&base, "my-client");
     let changed = repo::full_merge_pass(&fresh.doc_handle, sync_root.path(), "my-client");
@@ -130,7 +130,7 @@ async fn idempotent_merge() {
     let _ = ops::add_bookmark(&peer.doc_handle, &root_id, "https://example.com", "Test");
 
     let sync_root = TempDir::new().unwrap();
-    repo::export_doc_to_shared(&peer.doc_handle, sync_root.path(), "peer-a");
+    repo::export_doc_to_shared(&peer.doc_handle, sync_root.path(), "peer-a").unwrap();
 
     let local = fork_doc(&base, "local");
     repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local");
@@ -160,7 +160,8 @@ async fn multi_peer_merge() {
             &format!("https://peer{i}.com"),
             &format!("Peer {i}"),
         );
-        repo::export_doc_to_shared(&peer.doc_handle, sync_root.path(), &format!("peer-{i}"));
+        repo::export_doc_to_shared(&peer.doc_handle, sync_root.path(), &format!("peer-{i}"))
+            .unwrap();
     }
 
     let local = fork_doc(&base, "local");
@@ -178,7 +179,9 @@ async fn init_repo_fresh() {
     let sync_root = TempDir::new().unwrap();
 
     let (_repo_handle, doc_handle, _doc_id) =
-        repo::init_repo(local_dir.path(), sync_root.path(), "test-client").await;
+        repo::init_repo(local_dir.path(), sync_root.path(), "test-client")
+            .await
+            .unwrap();
 
     let store = hydrate_store(&doc_handle);
     assert!(!store.root_folder_id.is_empty());
