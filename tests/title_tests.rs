@@ -4,12 +4,14 @@
 )]
 mod common;
 
+use autosurgeon::hydrate;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::{get, post};
 use http_body_util::BodyExt;
 use mybriefcase_bookmarks::handlers;
+use mybriefcase_bookmarks::model::BookmarkStore;
 use mybriefcase_bookmarks::ops;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -155,4 +157,74 @@ async fn title_escapes_html_entities() {
         html.contains("<title>A&lt;B&amp;C — MyBriefcase Bookmarks</title>"),
         "Title should escape HTML entities"
     );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn create_folder_html_creates_folder_in_doc() {
+    let (app, root_id, doc_handle) = make_app();
+
+    let body = format!("parent_folder_id={root_id}&title=New+Folder");
+    let resp = app
+        .oneshot(
+            Request::post("/folders/new")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let store: BookmarkStore = doc_handle.with_doc(|d| hydrate(d).unwrap());
+    assert!(
+        store.folders.values().any(|f| f.title == "New Folder"),
+        "folder should be created in the document"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn delete_bookmark_html_removes_bookmark_from_doc() {
+    let (app, root_id, doc_handle) = make_app();
+    let bm_id = ops::add_bookmark(&doc_handle, &root_id, "https://example.com", "Bye").unwrap();
+
+    let body = format!("current_folder_id={root_id}");
+    let resp = app
+        .oneshot(
+            Request::post(format!("/bookmarks/{bm_id}/remove"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let store: BookmarkStore = doc_handle.with_doc(|d| hydrate(d).unwrap());
+    let bm = store.bookmarks.get(&bm_id).unwrap();
+    assert!(bm.deleted, "bookmark should be marked deleted");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn delete_folder_html_removes_folder_from_doc() {
+    let (app, root_id, doc_handle) = make_app();
+    let folder_id = ops::create_folder(&doc_handle, &root_id, "Doomed").unwrap();
+
+    let body = format!("current_folder_id={root_id}");
+    let resp = app
+        .oneshot(
+            Request::post(format!("/folders/{folder_id}/remove"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let store: BookmarkStore = doc_handle.with_doc(|d| hydrate(d).unwrap());
+    let folder = store.folders.get(&folder_id).unwrap();
+    assert!(folder.deleted, "folder should be marked deleted");
 }
