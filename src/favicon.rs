@@ -349,4 +349,46 @@ mod tests {
         assert_eq!(parse_size(Some("any")), 0);
         assert_eq!(parse_size(None), 0);
     }
+
+    #[test]
+    fn origin_url_https_default_port() {
+        let url = Url::parse("https://example.com:443/path").unwrap();
+        assert_eq!(origin_url(&url).unwrap(), "https://example.com");
+    }
+
+    #[test]
+    fn origin_url_https_custom_port() {
+        let url = Url::parse("https://example.com:8443/path").unwrap();
+        assert_eq!(origin_url(&url).unwrap(), "https://example.com:8443");
+    }
+
+    #[test]
+    fn origin_url_http_default_port() {
+        let url = Url::parse("http://example.com:80/page").unwrap();
+        assert_eq!(origin_url(&url).unwrap(), "http://example.com");
+    }
+
+    #[test]
+    fn origin_url_http_custom_port() {
+        let url = Url::parse("http://example.com:9000/page").unwrap();
+        assert_eq!(origin_url(&url).unwrap(), "http://example.com:9000");
+    }
+
+    #[test]
+    fn origin_url_unknown_scheme_always_shows_port() {
+        let url = Url::parse("ftp://files.example.com:21/pub").unwrap();
+        assert_eq!(origin_url(&url).unwrap(), "ftp://files.example.com:21");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn find_best_icon_link_equal_size_picks_first() {
+        let html = r#"<html><head>
+            <link rel="icon" href="/first.png" sizes="32x32">
+            <link rel="icon" href="/second.png" sizes="32x32">
+        </head></html>"#;
+        let base = Url::parse("https://example.com/").unwrap();
+        let result = find_best_icon_link(html, &base).unwrap();
+        assert_eq!(result, "https://example.com/first.png");
+    }
 }

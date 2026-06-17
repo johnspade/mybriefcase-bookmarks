@@ -548,4 +548,54 @@ mod tests {
             "&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;"
         );
     }
+
+    #[test]
+    fn is_folder_ancestor_same_id_is_false() {
+        let store = make_store("root", vec![("root", "Root", vec![])], vec![]);
+        assert!(!is_folder_ancestor(&store, "root", "root"));
+    }
+
+    #[test]
+    fn is_folder_ancestor_direct_child() {
+        let store = make_store(
+            "root",
+            vec![("root", "Root", vec!["child"]), ("child", "Child", vec![])],
+            vec![],
+        );
+        assert!(is_folder_ancestor(&store, "root", "child"));
+    }
+
+    #[test]
+    fn is_folder_ancestor_grandchild() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["mid"]),
+                ("mid", "Mid", vec!["leaf"]),
+                ("leaf", "Leaf", vec![]),
+            ],
+            vec![],
+        );
+        assert!(is_folder_ancestor(&store, "root", "leaf"));
+    }
+
+    #[test]
+    fn is_folder_ancestor_not_ancestor() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["a", "b"]),
+                ("a", "A", vec![]),
+                ("b", "B", vec![]),
+            ],
+            vec![],
+        );
+        assert!(!is_folder_ancestor(&store, "a", "b"));
+    }
+
+    #[test]
+    fn is_folder_ancestor_nonexistent_ancestor() {
+        let store = make_store("root", vec![("root", "Root", vec![])], vec![]);
+        assert!(!is_folder_ancestor(&store, "missing", "root"));
+    }
 }

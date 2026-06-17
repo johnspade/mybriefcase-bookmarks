@@ -26,7 +26,7 @@ jobs:
           use-flakehub: false
           source-url: https://github.com/johnspade/magic-nix-cache/releases/download/v0.1.6-fix172/magic-nix-cache.closure.xz
       - name: Run baseline
-        run: nix develop --command cargo mutants --in-place --no-shuffle -vV --timeout 300 --shard 0/1 --baseline=run
+        run: nix develop --command cargo test
 
   mutants-full:
     name: "Nightly: shard ${{ matrix.shard }}"
