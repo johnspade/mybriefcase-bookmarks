@@ -69,6 +69,7 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
     let app = Router::new()
         .route("/folders/{id}/content", get(handlers::folder_content))
         .route("/folders/{id}/rename", post(handlers::rename_folder_html))
+        .route("/folders/{id}/remove", post(handlers::delete_folder_html))
         .route("/bookmarks/{id}/detail", get(handlers::bookmark_detail))
         .route(
             "/bookmarks/{id}/edit-form",
@@ -79,12 +80,19 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
             "/bookmarks/{id}/fetch-favicon",
             post(handlers::fetch_favicon_html),
         )
+        .route(
+            "/bookmarks/{id}/history",
+            get(handlers::bookmark_history_html),
+        )
         .route("/bookmarks/new", post(handlers::create_bookmark_html))
         .route("/settings", get(handlers::settings_page))
         .route("/folder-options", get(handlers::folder_options))
         .route("/import", post(handlers::import_bookmarks_html))
         .route("/items/move", post(handlers::move_item_html))
         .route("/move-picker/{id}", get(handlers::move_picker_html))
+        .route("/sidebar", get(handlers::sidebar_only))
+        .route("/search", get(handlers::search))
+        .route("/favicons/{filename}", get(handlers::serve_favicon))
         .with_state(state);
     std::mem::forget(td.temp_dir);
     std::mem::forget(sync_root);
@@ -1549,5 +1557,483 @@ async fn after_write_exports_to_sync_root() {
     assert!(
         snapshot.exists(),
         "after_write should export the document to sync_root"
+    );
+}
+
+// ─── Kill escaped mutants: stories 10-20, 23 ────────
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn bookmark_detail_returns_empty_when_deleted() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+    ops::delete_bookmark(&doc, &bm_id).unwrap();
+
+    let (status, html) = get_html(app, &format!("/bookmarks/{bm_id}/detail")).await;
+    assert_eq!(status, StatusCode::OK);
+    // DetailEmptyTemplate renders empty detail — should NOT contain bookmark data
+    assert!(!html.contains("https://example.com"));
+    assert!(!html.contains("detail-title"));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn bookmark_edit_form_returns_empty_when_deleted() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+    ops::delete_bookmark(&doc, &bm_id).unwrap();
+
+    let (status, html) = get_html(app, &format!("/bookmarks/{bm_id}/edit-form")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!html.contains("name=\"title\""));
+    assert!(!html.contains("name=\"url\""));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn bookmark_history_returns_empty_when_deleted() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
+    ops::delete_bookmark(&doc, &bm_id).unwrap();
+
+    let (status, html) = get_html(app, &format!("/bookmarks/{bm_id}/history")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!html.contains("https://example.com"));
+    assert!(!html.contains("History"));
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn create_bookmark_data_favicon_not_fetched() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+
+    let body = format!(
+        "folder_id={root_id}&url=https%3A%2F%2Fexample.com&title=DataFav&favicon_url=data%3Aimage%2Fpng%3Bbase64%2CiVBOR"
+    );
+    let (status, _) = post_form(app, "/bookmarks/new", &body).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Give any potential async task a moment to run (it should NOT run)
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let bm = store
+        .bookmarks
+        .values()
+        .find(|b| b.title == "DataFav")
+        .expect("bookmark should exist");
+    assert_eq!(bm.favicon, "", "data: favicon URLs must not trigger fetch");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn create_bookmark_empty_favicon_not_fetched() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+
+    let body =
+        format!("folder_id={root_id}&url=https%3A%2F%2Fexample.com&title=EmptyFav&favicon_url=");
+    let (status, _) = post_form(app, "/bookmarks/new", &body).await;
+    assert_eq!(status, StatusCode::OK);
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let bm = store
+        .bookmarks
+        .values()
+        .find(|b| b.title == "EmptyFav")
+        .expect("bookmark should exist");
+    assert_eq!(bm.favicon, "", "empty favicon_url must not trigger fetch");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn update_bookmark_moves_to_different_folder() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_a = ops::create_folder(&doc, &root_id, "FolderA").unwrap();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Movable").unwrap();
+
+    // Move bookmark from root to folder_a via update
+    let body = format!("title=Movable&url=https%3A%2F%2Fexample.com&notes=&folder_id={folder_a}");
+    let (status, _) = post_form(app, &format!("/bookmarks/{bm_id}/edit"), &body).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let a = store.folders.get(&folder_a).unwrap();
+    assert!(
+        a.children.contains(&bm_id),
+        "bookmark should be in the new folder"
+    );
+    let root = store.folders.get(&root_id).unwrap();
+    assert!(
+        !root.children.contains(&bm_id),
+        "bookmark should be removed from the old folder"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn delete_folder_redirects_to_root_when_current() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_id = ops::create_folder(&doc, &root_id, "ToDelete").unwrap();
+
+    // Delete folder while current_folder_id == the deleted folder
+    let body = format!("current_folder_id={folder_id}");
+    let (status, html) = post_form(app, &format!("/folders/{folder_id}/remove"), &body).await;
+    assert_eq!(status, StatusCode::OK);
+    // Should redirect to root folder content — the root folder's breadcrumb title "Bookmarks"
+    // should appear in the response, and the deleted folder should NOT
+    assert!(
+        html.contains(&root_id),
+        "response should show root folder content"
+    );
+    assert!(
+        !html.contains("ToDelete"),
+        "deleted folder should not appear"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn delete_folder_stays_on_current_when_different() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let folder_to_delete = ops::create_folder(&doc, &root_id, "Victim").unwrap();
+    let _other_folder = ops::create_folder(&doc, &root_id, "Survivor").unwrap();
+
+    // Delete folder while current_folder_id is root (different from deleted)
+    let body = format!("current_folder_id={root_id}");
+    let (status, html) =
+        post_form(app, &format!("/folders/{folder_to_delete}/remove"), &body).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !html.contains("Victim"),
+        "deleted folder should not appear in content"
+    );
+    assert!(
+        html.contains("Survivor"),
+        "other folder should still appear"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn sidebar_only_returns_correct_total_count() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    ops::create_folder(&doc, &root_id, "SubA").unwrap();
+    ops::create_folder(&doc, &root_id, "SubB").unwrap();
+    ops::add_bookmark(&doc, &root_id, "https://example.com", "BM1").unwrap();
+
+    let (status, html) = get_html(app, &format!("/sidebar?folder_id={root_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    // 2 folders + 1 bookmark = 3 items
+    assert!(
+        html.contains("3 items"),
+        "sidebar should show total count (folders + bookmarks): got {html}"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn search_matches_url() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    ops::add_bookmark(
+        &doc,
+        &root_id,
+        "https://unique-domain.test/path",
+        "Generic Title",
+    )
+    .unwrap();
+
+    let (status, html) = get_html(app, "/search?q=unique-domain").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains("Generic Title"),
+        "search should match on URL field"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn search_matches_notes() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Plain Title").unwrap();
+    ops::update_bookmark(&doc, &bm_id, None, None, Some("special-keyword in notes")).unwrap();
+
+    let (status, html) = get_html(app, "/search?q=special-keyword").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains("Plain Title"),
+        "search should match on notes field"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn search_does_not_match_deleted_bookmarks() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id =
+        ops::add_bookmark(&doc, &root_id, "https://deleted-unique.test", "DeletedBM").unwrap();
+    ops::delete_bookmark(&doc, &bm_id).unwrap();
+
+    // Search by URL to avoid matching the search breadcrumb title
+    let (status, html) = get_html(app, "/search?q=deleted-unique").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !html.contains("DeletedBM"),
+        "deleted bookmarks should not appear in search results"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn serve_favicon_rejects_invalid_characters() {
+    let (app, _, _) = build_views_app_with_handle();
+
+    // Hyphens are not in the allowed set (hex digits, '.', ascii alpha)
+    let (status, _) = get_html(app.clone(), "/favicons/file-name.png").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Underscores not allowed
+    let (status, _) = get_html(app.clone(), "/favicons/file_name.png").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Spaces not allowed
+    let (status, _) = get_html(app.clone(), "/favicons/file%20name.png").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Special characters not allowed
+    let (status, _) = get_html(app, "/favicons/file%3Bname.png").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn serve_favicon_content_type_png() {
+    let td = new_initialized_doc("test-favicon-ct");
+    let sync_root = tempfile::TempDir::new().unwrap();
+    let favicons_dir = sync_root.path().join("favicons");
+    std::fs::create_dir_all(&favicons_dir).unwrap();
+    std::fs::write(favicons_dir.join("abc123.png"), b"fake-png-data").unwrap();
+
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let state = Arc::new(state::AppState {
+        doc_handle: td.doc_handle,
+        sync_root: sync_root.path().to_path_buf(),
+        client_id: "test-favicon-ct".to_string(),
+        sse_tx,
+        static_version: "test".to_string(),
+    });
+    let app = Router::new()
+        .route("/favicons/{filename}", get(handlers::serve_favicon))
+        .with_state(state);
+    std::mem::forget(td.temp_dir);
+    std::mem::forget(sync_root);
+
+    let resp = app
+        .oneshot(
+            Request::get("/favicons/abc123.png")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "image/png");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn serve_favicon_content_type_ico() {
+    let td = new_initialized_doc("test-favicon-ico");
+    let sync_root = tempfile::TempDir::new().unwrap();
+    let favicons_dir = sync_root.path().join("favicons");
+    std::fs::create_dir_all(&favicons_dir).unwrap();
+    std::fs::write(favicons_dir.join("abc123.ico"), b"fake-ico-data").unwrap();
+
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let state = Arc::new(state::AppState {
+        doc_handle: td.doc_handle,
+        sync_root: sync_root.path().to_path_buf(),
+        client_id: "test-favicon-ico".to_string(),
+        sse_tx,
+        static_version: "test".to_string(),
+    });
+    let app = Router::new()
+        .route("/favicons/{filename}", get(handlers::serve_favicon))
+        .with_state(state);
+    std::mem::forget(td.temp_dir);
+    std::mem::forget(sync_root);
+
+    let resp = app
+        .oneshot(
+            Request::get("/favicons/abc123.ico")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "image/x-icon");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn serve_favicon_content_type_svg() {
+    let td = new_initialized_doc("test-favicon-svg");
+    let sync_root = tempfile::TempDir::new().unwrap();
+    let favicons_dir = sync_root.path().join("favicons");
+    std::fs::create_dir_all(&favicons_dir).unwrap();
+    std::fs::write(favicons_dir.join("abc123.svg"), b"<svg></svg>").unwrap();
+
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let state = Arc::new(state::AppState {
+        doc_handle: td.doc_handle,
+        sync_root: sync_root.path().to_path_buf(),
+        client_id: "test-favicon-svg".to_string(),
+        sse_tx,
+        static_version: "test".to_string(),
+    });
+    let app = Router::new()
+        .route("/favicons/{filename}", get(handlers::serve_favicon))
+        .with_state(state);
+    std::mem::forget(td.temp_dir);
+    std::mem::forget(sync_root);
+
+    let resp = app
+        .oneshot(
+            Request::get("/favicons/abc123.svg")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "image/svg+xml");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn serve_favicon_content_type_jpg() {
+    let td = new_initialized_doc("test-favicon-jpg");
+    let sync_root = tempfile::TempDir::new().unwrap();
+    let favicons_dir = sync_root.path().join("favicons");
+    std::fs::create_dir_all(&favicons_dir).unwrap();
+    std::fs::write(favicons_dir.join("abc123.jpg"), b"fake-jpg").unwrap();
+
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let state = Arc::new(state::AppState {
+        doc_handle: td.doc_handle,
+        sync_root: sync_root.path().to_path_buf(),
+        client_id: "test-favicon-jpg".to_string(),
+        sse_tx,
+        static_version: "test".to_string(),
+    });
+    let app = Router::new()
+        .route("/favicons/{filename}", get(handlers::serve_favicon))
+        .with_state(state);
+    std::mem::forget(td.temp_dir);
+    std::mem::forget(sync_root);
+
+    let resp = app
+        .oneshot(
+            Request::get("/favicons/abc123.jpg")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "image/jpeg");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn serve_favicon_content_type_gif() {
+    let td = new_initialized_doc("test-favicon-gif");
+    let sync_root = tempfile::TempDir::new().unwrap();
+    let favicons_dir = sync_root.path().join("favicons");
+    std::fs::create_dir_all(&favicons_dir).unwrap();
+    std::fs::write(favicons_dir.join("abc123.gif"), b"GIF89a").unwrap();
+
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let state = Arc::new(state::AppState {
+        doc_handle: td.doc_handle,
+        sync_root: sync_root.path().to_path_buf(),
+        client_id: "test-favicon-gif".to_string(),
+        sse_tx,
+        static_version: "test".to_string(),
+    });
+    let app = Router::new()
+        .route("/favicons/{filename}", get(handlers::serve_favicon))
+        .with_state(state);
+    std::mem::forget(td.temp_dir);
+    std::mem::forget(sync_root);
+
+    let resp = app
+        .oneshot(
+            Request::get("/favicons/abc123.gif")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "image/gif");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn serve_favicon_content_type_webp() {
+    let td = new_initialized_doc("test-favicon-webp");
+    let sync_root = tempfile::TempDir::new().unwrap();
+    let favicons_dir = sync_root.path().join("favicons");
+    std::fs::create_dir_all(&favicons_dir).unwrap();
+    std::fs::write(favicons_dir.join("abc123.webp"), b"RIFF").unwrap();
+
+    let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let state = Arc::new(state::AppState {
+        doc_handle: td.doc_handle,
+        sync_root: sync_root.path().to_path_buf(),
+        client_id: "test-favicon-webp".to_string(),
+        sse_tx,
+        static_version: "test".to_string(),
+    });
+    let app = Router::new()
+        .route("/favicons/{filename}", get(handlers::serve_favicon))
+        .with_state(state);
+    std::mem::forget(td.temp_dir);
+    std::mem::forget(sync_root);
+
+    let resp = app
+        .oneshot(
+            Request::get("/favicons/abc123.webp")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "image/webp");
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn render_folder_response_total_item_count() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    ops::create_folder(&doc, &root_id, "F1").unwrap();
+    ops::create_folder(&doc, &root_id, "F2").unwrap();
+    ops::add_bookmark(&doc, &root_id, "https://a.com", "A").unwrap();
+    ops::add_bookmark(&doc, &root_id, "https://b.com", "B").unwrap();
+    ops::add_bookmark(&doc, &root_id, "https://c.com", "C").unwrap();
+
+    let (status, html) = get_html(app, &format!("/folders/{root_id}/content")).await;
+    assert_eq!(status, StatusCode::OK);
+    // 2 folders + 3 bookmarks = 5 items
+    assert!(
+        html.contains("5 items"),
+        "render_folder_response should show folders.len() + bookmarks.len(): got {html}"
     );
 }
