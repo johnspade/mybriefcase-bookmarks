@@ -149,8 +149,14 @@ mod tests {
     #[test]
     fn prefix_match_scores_higher_than_substring_match() {
         let store = make_store(vec![
-            ("a_substring", bookmark("Learn Rust Today", "https://other.com", "")),
-            ("z_prefix", bookmark("Rust Programming", "https://other.com", "")),
+            (
+                "a_substring",
+                bookmark("Learn Rust Today", "https://other.com", ""),
+            ),
+            (
+                "z_prefix",
+                bookmark("Rust Programming", "https://other.com", ""),
+            ),
         ]);
 
         let results = search_bookmarks(&store, "rust", SortOrder::Relevance);
@@ -193,8 +199,14 @@ mod tests {
     #[test]
     fn explicit_sort_overrides_relevance() {
         let store = make_store(vec![
-            ("high_relevance", bookmark("Rust Lang", "https://rust-lang.org", "all about rust")),
-            ("low_relevance", bookmark("About Programming", "https://other.com", "rust mentioned")),
+            (
+                "high_relevance",
+                bookmark("Rust Lang", "https://rust-lang.org", "all about rust"),
+            ),
+            (
+                "low_relevance",
+                bookmark("About Programming", "https://other.com", "rust mentioned"),
+            ),
         ]);
 
         // By relevance, high_relevance would win. With NameAsc, alphabetical order wins.
@@ -208,9 +220,18 @@ mod tests {
     #[test]
     fn title_match_ranks_above_url_only_ranks_above_notes_only() {
         let store = make_store(vec![
-            ("notes_only", bookmark("Unrelated", "https://other.com", "rust is great")),
-            ("url_only", bookmark("Unrelated", "https://rust-lang.org", "")),
-            ("title_match", bookmark("Rust Programming", "https://other.com", "")),
+            (
+                "notes_only",
+                bookmark("Unrelated", "https://other.com", "rust is great"),
+            ),
+            (
+                "url_only",
+                bookmark("Unrelated", "https://rust-lang.org", ""),
+            ),
+            (
+                "title_match",
+                bookmark("Rust Programming", "https://other.com", ""),
+            ),
         ]);
 
         let results = search_bookmarks(&store, "rust", SortOrder::Relevance);
