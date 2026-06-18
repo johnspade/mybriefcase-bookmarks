@@ -598,4 +598,120 @@ mod tests {
         let store = make_store("root", vec![("root", "Root", vec![])], vec![]);
         assert!(!is_folder_ancestor(&store, "missing", "root"));
     }
+
+    #[test]
+    fn find_parent_folder_id_skips_deleted_folders() {
+        let mut store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["parent", "child"]),
+                ("parent", "Parent", vec!["child"]),
+                ("child", "Child", vec![]),
+            ],
+            vec![],
+        );
+        // Mark the parent as deleted — it should be skipped
+        store.folders.get_mut("parent").unwrap().deleted = true;
+        // Root also has "child" in its children, so root should be found
+        let result = find_parent_folder_id(&store, "child");
+        assert_eq!(result, Some("root".to_string()));
+    }
+
+    #[test]
+    fn build_sidebar_html_nonempty_for_store_with_child_folders() {
+        let store = make_store(
+            "root",
+            vec![("root", "Root", vec!["child"]), ("child", "Work", vec![])],
+            vec![],
+        );
+        let html = build_sidebar_html(&store, "root");
+        assert!(!html.is_empty());
+        assert!(html.contains("Work"));
+    }
+
+    #[test]
+    fn build_sidebar_folder_count_badge_absent_when_zero_bookmarks() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["empty"]),
+                ("empty", "Empty Folder", vec![]),
+            ],
+            vec![],
+        );
+        let html = build_sidebar_html(&store, "root");
+        // The "item-count" badge should not appear for a folder with 0 bookmarks
+        assert!(!html.contains("item-count"));
+    }
+
+    #[test]
+    fn build_sidebar_folder_padding_math() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["level0"]),
+                ("level0", "L0", vec!["level1"]),
+                ("level1", "L1", vec![]),
+            ],
+            vec![],
+        );
+        // Open ancestor so nested folders render
+        let html = build_sidebar_html(&store, "level1");
+        // depth 0: padding-left:12px
+        assert!(html.contains("padding-left:12px"));
+        // depth 1: padding-left:30px (12 + 1*18)
+        assert!(html.contains("padding-left:30px"));
+    }
+
+    #[test]
+    fn build_folder_items_item_count_excludes_deleted_children() {
+        let mut store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["parent"]),
+                (
+                    "parent",
+                    "Parent",
+                    vec!["alive_folder", "dead_folder", "bm-alive", "bm-dead"],
+                ),
+                ("alive_folder", "Alive", vec![]),
+                ("dead_folder", "Dead", vec![]),
+            ],
+            vec![
+                ("bm-alive", "Alive BM", "https://a.com", "2026-01-01"),
+                ("bm-dead", "Dead BM", "https://b.com", "2026-01-01"),
+            ],
+        );
+        store.folders.get_mut("dead_folder").unwrap().deleted = true;
+        store.bookmarks.get_mut("bm-dead").unwrap().deleted = true;
+
+        let (folders, _) = build_folder_items(&store, "root", SortOrder::NameAsc);
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].title, "Parent");
+        // item_count should only include alive_folder + bm-alive = 2
+        assert_eq!(folders[0].item_count, 2);
+    }
+
+    #[test]
+    fn is_folder_ancestor_and_conjunction_exists_and_recurses() {
+        // The && requires BOTH that child_id exists in store.folders AND that
+        // recursion returns true. If && is mutated to ||, then a child existing
+        // in the store (but not containing the target) would incorrectly return true.
+        //
+        // Setup: root -> [mid], mid -> [] (no children), target "other" exists
+        // separately in the store but is NOT reachable from root.
+        // With &&: contains_key("mid") is true, but is_folder_ancestor("mid", "other")
+        //          is false => overall false (correct).
+        // With ||: contains_key("mid") is true => would return true (incorrect).
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["mid"]),
+                ("mid", "Mid", vec![]),
+                ("other", "Other", vec![]),
+            ],
+            vec![],
+        );
+        assert!(!is_folder_ancestor(&store, "root", "other"));
+    }
 }

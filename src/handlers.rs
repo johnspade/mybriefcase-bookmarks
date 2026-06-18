@@ -1251,4 +1251,96 @@ mod tests {
         let result = format_timestamp(ts);
         assert_eq!(result, "2001-09-09 01:46");
     }
+
+    #[test]
+    fn format_timestamp_exactly_at_threshold_boundary() {
+        // Exactly 1_000_000_000_000: the condition is `ts > 1_000_000_000_000`,
+        // so this value is NOT greater and is treated as seconds.
+        // If mutated to `>=`, it would be divided by 1000, yielding a different date.
+        let ts = 1_000_000_000_000;
+        let result = format_timestamp(ts);
+        // Treated as seconds: this is year ~33658, but chrono can still format it
+        // The key assertion: it must NOT equal what you'd get treating it as millis
+        let as_millis_result = format_timestamp(1_000_000_000_001); // > threshold, treated as millis
+        // as_millis_result formats timestamp 1_000_000_000 (the divided value)
+        // If the boundary value were also divided, it would be 1_000_000_000 too.
+        // But since it's treated as seconds (not divided), it's a much larger timestamp.
+        assert_ne!(result, as_millis_result);
+    }
+
+    fn make_store(
+        root_id: &str,
+        folders: Vec<(&str, &str, Vec<&str>)>,
+        bookmarks: Vec<(&str, &str, &str, &str)>,
+    ) -> BookmarkStore {
+        use std::collections::HashMap;
+        let mut folder_map = HashMap::new();
+        for (id, title, children) in folders {
+            folder_map.insert(
+                id.to_string(),
+                crate::model::Folder {
+                    title: title.to_string(),
+                    children: children.into_iter().map(String::from).collect(),
+                    created_at: "2026-01-01T00:00:00Z".to_string(),
+                    updated_at: "2026-01-01T00:00:00Z".to_string(),
+                    deleted: false,
+                },
+            );
+        }
+        let mut bookmark_map = HashMap::new();
+        for (id, title, url, created) in bookmarks {
+            bookmark_map.insert(
+                id.to_string(),
+                crate::model::Bookmark {
+                    url: url.to_string(),
+                    title: title.to_string(),
+                    notes: String::new(),
+                    favicon: String::new(),
+                    created_at: created.to_string(),
+                    updated_at: created.to_string(),
+                    deleted: false,
+                },
+            );
+        }
+        BookmarkStore {
+            root_folder_id: root_id.to_string(),
+            folders: folder_map,
+            bookmarks: bookmark_map,
+            meta: crate::model::StoreMeta {
+                schema_version: 1,
+                collection_name: "bookmarks".to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn find_folder_for_bookmark_returns_none_when_not_in_any_folder() {
+        let store = make_store(
+            "root",
+            vec![("root", "Root", vec![])],
+            vec![("bm-orphan", "Orphan", "https://x.com", "2026-01-01")],
+        );
+        // Bookmark exists in store.bookmarks but is not in any folder's children
+        let result = find_folder_for_bookmark(&store, "bm-orphan");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn collect_descendants_populates_output_set() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["a"]),
+                ("a", "A", vec!["b"]),
+                ("b", "B", vec![]),
+            ],
+            vec![],
+        );
+        let mut out = std::collections::HashSet::new();
+        collect_descendants(&store, "root", &mut out);
+        // Should contain "a" and "b" (non-deleted descendant folders)
+        assert!(out.contains("a"));
+        assert!(out.contains("b"));
+        assert_eq!(out.len(), 2);
+    }
 }
