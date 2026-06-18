@@ -9,4 +9,5 @@ pub mod model;
 pub mod ops;
 pub mod repo;
 pub mod schema;
+pub mod search;
 pub mod watcher;
