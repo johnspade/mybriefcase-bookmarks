@@ -209,6 +209,8 @@ fn mime_to_ext(mime: &str) -> &str {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     const VALID_PNG: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
     const VALID_ICO: &[u8] = &[0x00, 0x00, 0x01, 0x00, 0x01, 0x00];
@@ -390,5 +392,135 @@ mod tests {
         let base = Url::parse("https://example.com/").unwrap();
         let result = find_best_icon_link(html, &base).unwrap();
         assert_eq!(result, "https://example.com/first.png");
+    }
+
+    // --- Story 22: MAX_FAVICON_SIZE boundary ---
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn store_favicon_accepts_exactly_max_size() {
+        let tmp = TempDir::new().unwrap();
+        let mut data = vec![0u8; MAX_FAVICON_SIZE];
+        // Valid PNG header so image validation passes
+        data[..8].copy_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        let result = store_favicon(tmp.path(), &data, "image/png");
+        assert!(
+            result.is_ok(),
+            "exactly MAX_FAVICON_SIZE should be accepted"
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn store_favicon_rejects_one_byte_over_max() {
+        let tmp = TempDir::new().unwrap();
+        let mut data = vec![0u8; MAX_FAVICON_SIZE + 1];
+        data[..8].copy_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        let result = store_favicon(tmp.path(), &data, "image/png");
+        assert!(result.is_err(), "MAX_FAVICON_SIZE + 1 should be rejected");
+    }
+
+    // --- Story 21: is_retryable via fetch_and_store ---
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn fetch_and_store_retries_on_server_error() {
+        let server = MockServer::start().await;
+        // First request returns 503, second returns valid image
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(503))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(VALID_PNG, "image/png"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let result = fetch_and_store(tmp.path(), &server.uri()).await;
+        assert!(result.is_ok(), "should succeed after retrying 503");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn fetch_and_store_retries_on_429() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(429))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(VALID_PNG, "image/png"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let result = fetch_and_store(tmp.path(), &server.uri()).await;
+        assert!(result.is_ok(), "should succeed after retrying 429");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn fetch_and_store_does_not_retry_on_404() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(404))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let result = fetch_and_store(tmp.path(), &server.uri()).await;
+        assert!(result.is_err(), "404 should not be retried");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn fetch_and_store_retries_on_timeout() {
+        let server = MockServer::start().await;
+        // First request times out (delay > client timeout of 10s)
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(VALID_PNG, "image/png")
+                    .set_delay(std::time::Duration::from_secs(15)),
+            )
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        // Second request succeeds immediately
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(VALID_PNG, "image/png"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let tmp = TempDir::new().unwrap();
+        let result = fetch_and_store(tmp.path(), &server.uri()).await;
+        assert!(result.is_ok(), "should succeed after retrying timeout");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn discover_favicon_url_falls_back_when_non_html() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_string(r#"{"not": "html"}"#),
+            )
+            .mount(&server)
+            .await;
+
+        let result = discover_favicon_url(&server.uri()).await.unwrap();
+        assert_eq!(result, format!("{}/favicon.ico", server.uri()));
     }
 }
