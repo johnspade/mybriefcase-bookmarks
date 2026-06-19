@@ -145,11 +145,9 @@ fn spawn_watcher(state: &Arc<state::AppState>) {
                 &changed_peers,
             );
             if did_change {
-                let _ = watcher_state.exporter.export_debounced(
-                    &watcher_state.doc_handle,
-                    std::time::Instant::now(),
-                    std::time::SystemTime::now(),
-                );
+                let _ = watcher_state
+                    .exporter
+                    .export(&watcher_state.doc_handle, std::time::SystemTime::now());
                 let _ = watcher_state.sse_tx.send(());
                 eprintln!("Merged changes from peers: {}", changed_peers.join(", "));
             }
@@ -171,11 +169,9 @@ fn spawn_poller(state: &Arc<state::AppState>) {
             }
             let did_merge = watcher::merge_specific_peers(&st.doc_handle, &st.sync_root, &changed);
             if did_merge {
-                let _ = st.exporter.export_debounced(
-                    &st.doc_handle,
-                    std::time::Instant::now(),
-                    std::time::SystemTime::now(),
-                );
+                let _ = st
+                    .exporter
+                    .export(&st.doc_handle, std::time::SystemTime::now());
                 let _ = st.sse_tx.send(());
                 eprintln!("Poll: merged changes from peers: {}", changed.join(", "));
             }
@@ -211,13 +207,9 @@ async fn main() {
     .expect("failed to initialize repository");
 
     repo::full_merge_pass(&doc_handle, &cfg.sync_root, &client_id);
-    let exporter = repo::DebouncedExporter::new(&cfg.sync_root, &client_id);
+    let exporter = repo::Exporter::new(&cfg.sync_root, &client_id);
     exporter
-        .export_now(
-            &doc_handle,
-            std::time::Instant::now(),
-            std::time::SystemTime::now(),
-        )
+        .export(&doc_handle, std::time::SystemTime::now())
         .expect("failed to export document");
     write_peer_info(&cfg.sync_root, &client_id);
 

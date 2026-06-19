@@ -1,6 +1,6 @@
 use automerge_repo::DocHandle;
 use mybriefcase_bookmarks_core::error::CoreError;
-use mybriefcase_bookmarks_core::repo::DebouncedExporter;
+use mybriefcase_bookmarks_core::repo::Exporter;
 use std::path::PathBuf;
 
 pub struct AppState {
@@ -9,16 +9,13 @@ pub struct AppState {
     pub client_id: String,
     pub sse_tx: tokio::sync::broadcast::Sender<()>,
     pub static_version: String,
-    pub exporter: DebouncedExporter,
+    pub exporter: Exporter,
 }
 
 impl AppState {
     fn after_write(&self) -> Result<(), CoreError> {
-        self.exporter.export_now(
-            &self.doc_handle,
-            std::time::Instant::now(),
-            std::time::SystemTime::now(),
-        )?;
+        self.exporter
+            .export(&self.doc_handle, std::time::SystemTime::now())?;
         let _ = self.sse_tx.send(());
         Ok(())
     }
