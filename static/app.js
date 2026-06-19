@@ -293,6 +293,12 @@ function initApp() {
                       {target: '#folder-content', swap: 'innerHTML', source: sseSource});
           }, 500);
         }
+
+        const selected = document.querySelector('.list-item.selected[data-item-id]');
+        if (selected) {
+          htmx.ajax('GET', '/bookmarks/' + selected.getAttribute('data-item-id') + '/detail',
+                    {target: '#detail-body', swap: 'innerHTML'});
+        }
       });
 
       evtSource.onerror = function() {
