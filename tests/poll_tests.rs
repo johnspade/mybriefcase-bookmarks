@@ -214,3 +214,48 @@ async fn poll_bidirectional_sync() {
         "both nodes should converge to the same bookmark count"
     );
 }
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn reexport_after_merge_propagates_to_third_peer() {
+    let base = new_initialized_doc("base");
+    let root_id = base.root_folder_id.clone();
+    let sync_root = TempDir::new().unwrap();
+
+    let node_a = fork_doc(&base, "node-a");
+    let node_b = fork_doc(&base, "node-b");
+    let node_c = fork_doc(&base, "node-c");
+    repo::export_doc_to_shared(&node_a.doc_handle, sync_root.path(), "node-a").unwrap();
+    repo::export_doc_to_shared(&node_b.doc_handle, sync_root.path(), "node-b").unwrap();
+    repo::export_doc_to_shared(&node_c.doc_handle, sync_root.path(), "node-c").unwrap();
+
+    let mut poll_b = watcher::PollState::new(sync_root.path(), "node-b");
+    let mut poll_c = watcher::PollState::new(sync_root.path(), "node-c");
+
+    // Node A adds a bookmark and exports. Node C cannot see node-a's directory
+    // (simulating partial Syncthing topology: A syncs with B, B syncs with C).
+    let _ = ops::add_bookmark(&node_a.doc_handle, &root_id, "https://from-a.com", "From A");
+    repo::export_doc_to_shared(&node_a.doc_handle, sync_root.path(), "node-a").unwrap();
+
+    // Node B polls, merges A's data, and re-exports (the behavior under test).
+    std::thread::sleep(Duration::from_millis(1100));
+    let changed_b = poll_b.poll_changed_peers(sync_root.path(), "node-b");
+    let did_merge = watcher::merge_specific_peers(&node_b.doc_handle, sync_root.path(), &changed_b);
+    assert!(did_merge);
+    repo::export_doc_to_shared(&node_b.doc_handle, sync_root.path(), "node-b").unwrap();
+
+    // Node C polls and merges only from node-b (not node-a directly).
+    std::thread::sleep(Duration::from_millis(1100));
+    let _changed_c = poll_c.poll_changed_peers(sync_root.path(), "node-c");
+    watcher::merge_specific_peers(
+        &node_c.doc_handle,
+        sync_root.path(),
+        &[String::from("node-b")],
+    );
+
+    let store_c = hydrate_store(&node_c.doc_handle);
+    assert!(
+        store_c.bookmarks.values().any(|b| b.title == "From A"),
+        "node-c should see node-a's bookmark transitively via node-b's re-export"
+    );
+}
