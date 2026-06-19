@@ -1331,6 +1331,62 @@ mod tests {
     }
 
     #[test]
+    fn find_parent_folder_id_finds_parent() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["parent"]),
+                ("parent", "Parent", vec!["child"]),
+                ("child", "Child", vec![]),
+            ],
+            vec![],
+        );
+        let result = find_parent_folder_id(&store, "child");
+        assert_eq!(result, Some("parent".to_string()));
+    }
+
+    #[test]
+    fn find_parent_folder_id_returns_none_for_orphan() {
+        let store = make_store(
+            "root",
+            vec![("root", "Root", vec![]), ("orphan", "Orphan", vec![])],
+            vec![],
+        );
+        let result = find_parent_folder_id(&store, "orphan");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn find_folder_for_bookmark_finds_containing_folder() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["folder"]),
+                ("folder", "Folder", vec!["bm1"]),
+            ],
+            vec![("bm1", "BM", "https://x.com", "2026-01-01")],
+        );
+        let result = find_folder_for_bookmark(&store, "bm1");
+        assert_eq!(result, Some("folder"));
+    }
+
+    #[test]
+    fn find_folder_for_bookmark_skips_deleted_folders() {
+        let mut store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["alive", "dead"]),
+                ("alive", "Alive", vec!["bm1"]),
+                ("dead", "Dead", vec!["bm1"]),
+            ],
+            vec![("bm1", "BM", "https://x.com", "2026-01-01")],
+        );
+        store.folders.get_mut("dead").unwrap().deleted = true;
+        let result = find_folder_for_bookmark(&store, "bm1");
+        assert_eq!(result, Some("alive"));
+    }
+
+    #[test]
     fn collect_descendants_populates_output_set() {
         let store = make_store(
             "root",

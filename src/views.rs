@@ -714,4 +714,112 @@ mod tests {
         );
         assert!(!is_folder_ancestor(&store, "root", "other"));
     }
+
+    #[test]
+    fn build_sidebar_folder_selected_class_only_on_current() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["a", "b"]),
+                ("a", "FolderA", vec![]),
+                ("b", "FolderB", vec![]),
+            ],
+            vec![],
+        );
+        let html = build_sidebar_html(&store, "a");
+        assert!(
+            html.contains(r#"class="tree-item selected""#),
+            "selected folder should have 'selected' class"
+        );
+        let selected_count = html.matches(" selected").count();
+        assert_eq!(selected_count, 1, "only one folder should be selected");
+    }
+
+    #[test]
+    fn build_sidebar_folder_ancestor_opens_tree() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["parent"]),
+                ("parent", "Parent", vec!["child"]),
+                ("child", "Child", vec![]),
+            ],
+            vec![],
+        );
+        let html = build_sidebar_html(&store, "child");
+        let open_count = html.matches("tree-children open").count();
+        assert!(
+            open_count >= 1,
+            "ancestor folder should have open tree-children"
+        );
+    }
+
+    #[test]
+    fn build_sidebar_folder_shows_count_badge_when_bookmarks_exist() {
+        let store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["folder"]),
+                ("folder", "HasBookmarks", vec!["bm1", "bm2", "bm3"]),
+            ],
+            vec![
+                ("bm1", "A", "https://a.com", "2026-01-01"),
+                ("bm2", "B", "https://b.com", "2026-01-01"),
+                ("bm3", "C", "https://c.com", "2026-01-01"),
+            ],
+        );
+        let html = build_sidebar_html(&store, "root");
+        assert!(
+            html.contains(r#"class="item-count">3<"#),
+            "folder with 3 bookmarks should show count badge '3': {html}"
+        );
+    }
+
+    #[test]
+    fn build_folder_items_item_count_distinguishes_alive_from_dead() {
+        let mut store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["parent"]),
+                ("parent", "Parent", vec!["alive1", "alive2", "dead1"]),
+                ("alive1", "Alive1", vec![]),
+                ("alive2", "Alive2", vec![]),
+                ("dead1", "Dead1", vec![]),
+            ],
+            vec![],
+        );
+        store.folders.get_mut("dead1").unwrap().deleted = true;
+
+        let (folders, _) = build_folder_items(&store, "root", SortOrder::NameAsc);
+        assert_eq!(folders.len(), 1);
+        // 2 alive children, not 1 dead child
+        assert_eq!(
+            folders[0].item_count, 2,
+            "item_count must count only non-deleted children"
+        );
+    }
+
+    #[test]
+    fn build_folder_items_item_count_distinguishes_alive_bookmarks_from_dead() {
+        let mut store = make_store(
+            "root",
+            vec![
+                ("root", "Root", vec!["parent"]),
+                ("parent", "Parent", vec!["bm-a", "bm-b", "bm-dead"]),
+            ],
+            vec![
+                ("bm-a", "A", "https://a.com", "2026-01-01"),
+                ("bm-b", "B", "https://b.com", "2026-01-01"),
+                ("bm-dead", "Dead", "https://d.com", "2026-01-01"),
+            ],
+        );
+        store.bookmarks.get_mut("bm-dead").unwrap().deleted = true;
+
+        let (folders, _) = build_folder_items(&store, "root", SortOrder::NameAsc);
+        assert_eq!(folders.len(), 1);
+        assert_eq!(
+            folders[0].item_count, 2,
+            "item_count must count only non-deleted bookmark children"
+        );
+    }
 }

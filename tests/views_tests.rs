@@ -2046,3 +2046,163 @@ async fn render_folder_response_total_item_count() {
         "render_folder_response should show folders.len() + bookmarks.len(): got {html}"
     );
 }
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn update_bookmark_response_total_item_count() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    ops::create_folder(&doc, &root_id, "F1").unwrap();
+    ops::create_folder(&doc, &root_id, "F2").unwrap();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://a.com", "A").unwrap();
+    ops::add_bookmark(&doc, &root_id, "https://b.com", "B").unwrap();
+    ops::add_bookmark(&doc, &root_id, "https://c.com", "C").unwrap();
+
+    let (status, html) = post_form(
+        app,
+        &format!("/bookmarks/{bm_id}/edit"),
+        "title=Updated&url=https%3A%2F%2Fa.com&notes=",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    // 2 folders + 3 bookmarks = 5 items
+    assert!(
+        html.contains("5 items"),
+        "update_bookmark response should show correct total item count: got {html}"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn revert_bookmark_response_total_item_count() {
+    let (app, root_id, doc, _) = build_views_app_with_sync_root();
+    ops::create_folder(&doc, &root_id, "F1").unwrap();
+    ops::create_folder(&doc, &root_id, "F2").unwrap();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://a.com", "A").unwrap();
+    ops::add_bookmark(&doc, &root_id, "https://b.com", "B").unwrap();
+    ops::add_bookmark(&doc, &root_id, "https://c.com", "C").unwrap();
+    ops::update_bookmark(&doc, &bm_id, None, Some("Changed"), None).unwrap();
+
+    let entries = history::bookmark_history(&doc, &bm_id);
+    let v1_hash = &entries.last().unwrap().hash;
+
+    let body = format!("target_hash={v1_hash}");
+    let (status, html) = post_form(app, &format!("/bookmarks/{bm_id}/revert"), &body).await;
+    assert_eq!(status, StatusCode::OK);
+    // 2 folders + 3 bookmarks = 5 items
+    assert!(
+        html.contains("5 items"),
+        "revert_bookmark response should show correct total item count: got {html}"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn bookmark_history_returns_content_for_existing_bookmark() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "HistoryTest").unwrap();
+    ops::update_bookmark(&doc, &bm_id, None, Some("Updated Title"), None).unwrap();
+
+    let (status, html) = get_html(app, &format!("/bookmarks/{bm_id}/history")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !html.is_empty(),
+        "bookmark_history_html should return non-empty content"
+    );
+    assert!(
+        html.contains("HistoryTest") || html.contains("Updated Title"),
+        "history should contain bookmark info"
+    );
+    assert!(
+        html.contains("History"),
+        "history page should contain History button"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn create_bookmark_favicon_propagates_to_existing_same_url() {
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let icon_bytes: Vec<u8> = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
+
+    let icon_clone = icon_bytes.clone();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        loop {
+            let Ok((mut stream, _)) = listener.accept() else {
+                break;
+            };
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\n\r\n",
+                icon_clone.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.write_all(&icon_clone);
+            let _ = stream.flush();
+        }
+    });
+
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let url = format!("http://127.0.0.1:{port}/icon.png");
+
+    // Create first bookmark with same URL (no favicon)
+    let existing_bm = ops::add_bookmark(
+        &doc,
+        &root_id,
+        &format!("http://127.0.0.1:{port}/page"),
+        "Existing",
+    )
+    .unwrap();
+
+    // Create second bookmark with favicon_url pointing to our server
+    let encoded_url = format!("http://127.0.0.1:{port}/page")
+        .replace(':', "%3A")
+        .replace('/', "%2F");
+    let encoded_favicon = url.replace(':', "%3A").replace('/', "%2F");
+    let body =
+        format!("folder_id={root_id}&url={encoded_url}&title=New&favicon_url={encoded_favicon}");
+    let (status, _) = post_form(app, "/bookmarks/new", &body).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Wait for async favicon task to complete
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    let existing = store.bookmarks.get(&existing_bm).unwrap();
+    assert!(
+        !existing.favicon.is_empty(),
+        "favicon should propagate to existing bookmark with same URL"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn update_bookmark_favicon_propagates_skips_deleted() {
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let bm1 = ops::add_bookmark(&doc, &root_id, "https://same.com", "Live").unwrap();
+    let bm2 = ops::add_bookmark(&doc, &root_id, "https://same.com", "Deleted").unwrap();
+    ops::delete_bookmark(&doc, &bm2).unwrap();
+
+    let (status, _) = post_form(
+        app,
+        &format!("/bookmarks/{bm1}/edit"),
+        "title=Live&url=https%3A%2F%2Fsame.com&notes=&favicon=icon.png",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    assert_eq!(store.bookmarks.get(&bm1).unwrap().favicon, "icon.png");
+    // Deleted bookmark should NOT get the propagated favicon
+    assert_eq!(
+        store.bookmarks.get(&bm2).unwrap().favicon,
+        "",
+        "deleted bookmarks must not receive propagated favicon"
+    );
+}

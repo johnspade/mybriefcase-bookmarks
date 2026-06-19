@@ -509,6 +509,46 @@ mod tests {
 
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
+    async fn discover_favicon_url_parses_html_for_icon_link() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    r#"<html><head><link rel="icon" href="/custom-icon.png" sizes="32x32"></head></html>"#,
+                    "text/html; charset=utf-8",
+                ),
+            )
+            .mount(&server)
+            .await;
+
+        let result = discover_favicon_url(&server.uri()).await.unwrap();
+        assert!(
+            result.contains("/custom-icon.png"),
+            "should parse HTML and find icon link, got: {result}"
+        );
+        assert!(
+            !result.contains("/favicon.ico"),
+            "should NOT fall back to /favicon.ico for HTML pages"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn store_favicon_rejects_at_boundary_correctly() {
+        let tmp = TempDir::new().unwrap();
+        // MAX_FAVICON_SIZE = 256 * 1024 = 262144
+        // If mutated to 256 + 1024 = 1280, then 2000 bytes would be rejected
+        let mut data = vec![0u8; 2000];
+        data[..8].copy_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        let result = store_favicon(tmp.path(), &data, "image/png");
+        assert!(
+            result.is_ok(),
+            "2000 bytes should be accepted (well under 256*1024)"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn discover_favicon_url_falls_back_when_non_html() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
