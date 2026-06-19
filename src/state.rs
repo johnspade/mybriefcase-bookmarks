@@ -14,7 +14,11 @@ pub struct AppState {
 
 impl AppState {
     fn after_write(&self) -> Result<(), CoreError> {
-        self.exporter.export_now(&self.doc_handle)?;
+        self.exporter.export_now(
+            &self.doc_handle,
+            std::time::Instant::now(),
+            std::time::SystemTime::now(),
+        )?;
         let _ = self.sse_tx.send(());
         Ok(())
     }

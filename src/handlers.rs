@@ -580,7 +580,12 @@ pub async fn create_bookmark_html(
                 for bm_id in &ids_to_update {
                     let _ = ops::update_favicon(&doc_handle, bm_id, &filename);
                 }
-                let _ = crate::repo::export_doc_to_shared(&doc_handle, &sync_root, &client_id);
+                let _ = crate::repo::export_doc_to_shared(
+                    &doc_handle,
+                    &sync_root,
+                    &client_id,
+                    std::time::SystemTime::now(),
+                );
                 let _ = sse_tx.send(());
             }
         });

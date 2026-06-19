@@ -24,6 +24,7 @@ pub async fn init_repo(
     local_data_dir: &Path,
     sync_root: &Path,
     client_id: &str,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(RepoHandle, DocHandle, DocumentId), CoreError> {
     let local_store_path = local_data_dir.join("repo_store");
     std::fs::create_dir_all(&local_store_path)?;
@@ -68,7 +69,7 @@ pub async fn init_repo(
         let handle = repo_handle.new_document();
         handle.with_doc_mut(|doc| {
             let mut tx = doc.transaction();
-            let now = chrono::Utc::now().to_rfc3339();
+            let now = now.to_rfc3339();
             let root_id = uuid::Uuid::new_v4().to_string();
 
             tx.put(automerge::ROOT, RootFolderId.as_ref(), root_id.as_str())
@@ -168,6 +169,7 @@ pub fn export_doc_to_shared(
     doc_handle: &DocHandle,
     sync_root: &Path,
     client_id: &str,
+    mtime: std::time::SystemTime,
 ) -> Result<(), CoreError> {
     let shared = sync_root.join(client_id).join("store");
     std::fs::create_dir_all(&shared)?;
@@ -177,6 +179,7 @@ pub fn export_doc_to_shared(
     let tmp = dest.with_extension("tmp");
     std::fs::write(&tmp, &data)?;
     std::fs::rename(&tmp, &dest)?;
+    std::fs::File::open(&dest)?.set_modified(mtime)?;
     Ok(())
 }
 
@@ -209,15 +212,20 @@ impl DebouncedExporter {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn export_debounced(&self, doc_handle: &DocHandle) -> Result<bool, CoreError> {
+    pub fn export_debounced(
+        &self,
+        doc_handle: &DocHandle,
+        now: Instant,
+        mtime: std::time::SystemTime,
+    ) -> Result<bool, CoreError> {
         let mut last = self.last_export.lock().unwrap();
         if let Some(t) = *last {
-            if t.elapsed() < self.debounce {
+            if now.duration_since(t) < self.debounce {
                 return Ok(false);
             }
         }
-        self.write(doc_handle)?;
-        *last = Some(Instant::now());
+        self.write(doc_handle, mtime)?;
+        *last = Some(now);
         drop(last);
         Ok(true)
     }
@@ -231,19 +239,25 @@ impl DebouncedExporter {
     ///
     /// # Panics
     /// Panics if the internal mutex is poisoned.
-    pub fn export_now(&self, doc_handle: &DocHandle) -> Result<(), CoreError> {
-        self.write(doc_handle)?;
-        *self.last_export.lock().unwrap() = Some(Instant::now());
+    pub fn export_now(
+        &self,
+        doc_handle: &DocHandle,
+        now: Instant,
+        mtime: std::time::SystemTime,
+    ) -> Result<(), CoreError> {
+        self.write(doc_handle, mtime)?;
+        *self.last_export.lock().unwrap() = Some(now);
         Ok(())
     }
 
-    fn write(&self, doc_handle: &DocHandle) -> Result<(), CoreError> {
+    fn write(&self, doc_handle: &DocHandle, mtime: std::time::SystemTime) -> Result<(), CoreError> {
         std::fs::create_dir_all(&self.dest)?;
         let data = doc_handle.with_doc(automerge::Automerge::save);
         let dest = self.dest.join("document.snapshot");
         let tmp = dest.with_extension("tmp");
         std::fs::write(&tmp, &data)?;
         std::fs::rename(&tmp, &dest)?;
+        std::fs::File::open(&dest)?.set_modified(mtime)?;
         Ok(())
     }
 }
@@ -436,5 +450,95 @@ mod tests {
         let files = walk_files(&store);
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("document.snapshot"));
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn export_doc_to_shared_sets_mtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        doc_handle.with_doc_mut(|doc| {
+            let mut tx = doc.transaction();
+            tx.put(automerge::ROOT, "key", "value").unwrap();
+            tx.commit();
+        });
+
+        let mtime = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        export_doc_to_shared(&doc_handle, sync_root, "client-a", mtime).unwrap();
+
+        let snapshot = sync_root
+            .join("client-a")
+            .join("store")
+            .join("document.snapshot");
+        let actual_mtime = std::fs::metadata(&snapshot).unwrap().modified().unwrap();
+        assert_eq!(actual_mtime, mtime);
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn debounced_exporter_sets_mtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        doc_handle.with_doc_mut(|doc| {
+            let mut tx = doc.transaction();
+            tx.put(automerge::ROOT, "key", "value").unwrap();
+            tx.commit();
+        });
+
+        let exporter = DebouncedExporter::new(sync_root, "client-a");
+        let mtime = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        exporter
+            .export_now(&doc_handle, Instant::now(), mtime)
+            .unwrap();
+
+        let snapshot = sync_root
+            .join("client-a")
+            .join("store")
+            .join("document.snapshot");
+        let actual_mtime = std::fs::metadata(&snapshot).unwrap().modified().unwrap();
+        assert_eq!(actual_mtime, mtime);
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn debounced_exporter_respects_debounce_interval() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        doc_handle.with_doc_mut(|doc| {
+            let mut tx = doc.transaction();
+            tx.put(automerge::ROOT, "key", "value").unwrap();
+            tx.commit();
+        });
+
+        let exporter = DebouncedExporter::new(sync_root, "client-a");
+        let base = Instant::now();
+        let mtime1 = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let mtime2 = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_001);
+
+        let exported = exporter
+            .export_debounced(&doc_handle, base, mtime1)
+            .unwrap();
+        assert!(exported);
+
+        let skipped = exporter
+            .export_debounced(&doc_handle, base + Duration::from_secs(1), mtime2)
+            .unwrap();
+        assert!(!skipped, "should skip within debounce interval");
+
+        let snapshot = sync_root
+            .join("client-a")
+            .join("store")
+            .join("document.snapshot");
+        let actual_mtime = std::fs::metadata(&snapshot).unwrap().modified().unwrap();
+        assert_eq!(
+            actual_mtime, mtime1,
+            "mtime should remain from first export"
+        );
     }
 }
