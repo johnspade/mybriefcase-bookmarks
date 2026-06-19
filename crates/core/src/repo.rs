@@ -48,6 +48,9 @@ pub async fn init_repo(
             .await
             .map_err(|e| CoreError::Io(std::io::Error::other(format!("{e:?}"))))?
         {
+            // Merge from own export to recover changes that were exported but not
+            // flushed to FsStorage before the process was killed.
+            merge_own_export(&handle, sync_root, client_id);
             return Ok((repo_handle, handle, doc_id));
         }
 
@@ -173,6 +176,22 @@ pub fn export_doc_to_shared(
     Ok(())
 }
 
+/// Merge from own export file to recover changes that were written to the sync
+/// directory but not flushed to `FsStorage` before process termination.
+fn merge_own_export(doc_handle: &DocHandle, sync_root: &Path, client_id: &str) {
+    let snapshot = sync_root
+        .join(client_id)
+        .join("store")
+        .join("document.snapshot");
+    if let Ok(data) = std::fs::read(&snapshot) {
+        doc_handle.with_doc_mut(|doc| {
+            if let Ok(mut peer_doc) = Automerge::load(&data) {
+                let _ = doc.merge(&mut peer_doc);
+            }
+        });
+    }
+}
+
 fn walk_files(dir: &Path) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
     walk_files_inner(dir, &mut files);
@@ -184,15 +203,24 @@ fn walk_files_inner(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
         let path = entry.path();
         if path.is_dir() {
             walk_files_inner(&path, files);
-        } else if path.is_file() {
+        } else if path.is_file() && !is_temp_file(&path) {
             files.push(path);
         }
     }
 }
 
+fn is_temp_file(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("tmp"))
+        || name.starts_with(".syncthing.")
+        || name.ends_with(".syncthing")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use automerge::ReadDoc;
     use automerge::transaction::Transactable;
 
     fn make_peer_snapshot(sync_root: &Path, peer_id: &str, doc: &Automerge) {
@@ -290,5 +318,51 @@ mod tests {
 
         let changed = full_merge_pass(&doc_handle, sync_root, "my-client");
         assert!(!changed, "should skip own client directory");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn merge_own_export_recovers_unflushed_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        // Simulate a change that was exported but not flushed to FsStorage:
+        // write directly to own export path.
+        let mut exported_doc = Automerge::new();
+        let mut tx = exported_doc.transaction();
+        tx.put(automerge::ROOT, "recovered_key", "recovered_value")
+            .unwrap();
+        tx.commit();
+
+        make_peer_snapshot(sync_root, "my-client", &exported_doc);
+
+        // merge_own_export should bring the change back
+        merge_own_export(&doc_handle, sync_root, "my-client");
+
+        let val: Option<String> = doc_handle.with_doc(|doc| {
+            doc.get(automerge::ROOT, "recovered_key")
+                .ok()
+                .flatten()
+                .map(|(v, _)| v.into_string().unwrap())
+        });
+        assert_eq!(val.as_deref(), Some("recovered_value"));
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn walk_files_skips_temp_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("store");
+        std::fs::create_dir_all(&store).unwrap();
+
+        std::fs::write(store.join("document.snapshot"), b"good").unwrap();
+        std::fs::write(store.join("document.tmp"), b"temp").unwrap();
+        std::fs::write(store.join(".syncthing.document.snapshot"), b"syncthing").unwrap();
+
+        let files = walk_files(&store);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("document.snapshot"));
     }
 }
