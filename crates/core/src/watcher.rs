@@ -78,7 +78,7 @@ pub fn merge_specific_peers(
     sync_root: &Path,
     peers: &[String],
 ) -> bool {
-    let mut changed = false;
+    let heads_before = doc_handle.with_doc(|doc| doc.get_heads());
     for peer_id in peers {
         let store_dir = sync_root.join(peer_id).join("store");
         if !store_dir.is_dir() {
@@ -89,17 +89,16 @@ pub fn merge_specific_peers(
             if let Ok(data) = std::fs::read(file_path) {
                 doc_handle.with_doc_mut(|doc| {
                     if let Ok(mut peer_doc) = automerge::Automerge::load(&data) {
-                        if doc.merge(&mut peer_doc).is_ok() {
-                            changed = true;
-                        }
-                    } else if doc.load_incremental(&data).is_ok() {
-                        changed = true;
+                        let _ = doc.merge(&mut peer_doc);
+                    } else {
+                        let _ = doc.load_incremental(&data);
                     }
                 });
             }
         }
     }
-    changed
+    let heads_after = doc_handle.with_doc(|doc| doc.get_heads());
+    heads_before != heads_after
 }
 
 /// Tracks file modification times to efficiently detect peer changes via polling.
@@ -195,6 +194,7 @@ fn walk_files_inner(dir: &Path, files: &mut Vec<PathBuf>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use automerge::transaction::Transactable;
     use std::path::Path;
 
     fn make_peer_store(sync_root: &Path, peer: &str) -> PathBuf {
@@ -432,5 +432,79 @@ mod tests {
         let mut peers = HashSet::new();
         extract_peer_ids(&event, sync_root, "my-client", &mut peers);
         assert!(peers.is_empty());
+    }
+
+    fn make_doc_handle(dir: &Path) -> (automerge_repo::RepoHandle, automerge_repo::DocHandle) {
+        let store =
+            automerge_repo::tokio::FsStorage::open(dir.join("repo_store")).unwrap();
+        let repo = automerge_repo::Repo::new(None, Box::new(store));
+        let repo_handle = repo.run();
+        let doc_handle = repo_handle.new_document();
+        (repo_handle, doc_handle)
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn merge_specific_peers_returns_false_when_no_new_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        doc_handle.with_doc_mut(|doc| {
+            let mut tx = doc.transaction();
+            tx.put(automerge::ROOT, "key", "value").unwrap();
+            tx.commit();
+        });
+
+        let store = make_peer_store(root, "peer-a");
+        let data = doc_handle.with_doc(|doc| doc.save());
+        std::fs::write(store.join("document.snapshot"), &data).unwrap();
+
+        let changed = merge_specific_peers(&doc_handle, root, &["peer-a".to_string()]);
+        assert!(!changed, "merge of already-known data should return false");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn merge_specific_peers_returns_true_when_peer_has_new_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        let mut peer_doc = automerge::Automerge::new();
+        let mut tx = peer_doc.transaction();
+        tx.put(automerge::ROOT, "peer_key", "peer_value").unwrap();
+        tx.commit();
+
+        let store = make_peer_store(root, "peer-a");
+        std::fs::write(store.join("document.snapshot"), peer_doc.save()).unwrap();
+
+        let changed = merge_specific_peers(&doc_handle, root, &["peer-a".to_string()]);
+        assert!(changed, "merge of new peer data should return true");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn merge_specific_peers_idempotent_on_second_call() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        let mut peer_doc = automerge::Automerge::new();
+        let mut tx = peer_doc.transaction();
+        tx.put(automerge::ROOT, "key", "val").unwrap();
+        tx.commit();
+
+        let store = make_peer_store(root, "peer-a");
+        std::fs::write(store.join("document.snapshot"), peer_doc.save()).unwrap();
+
+        let first = merge_specific_peers(&doc_handle, root, &["peer-a".to_string()]);
+        assert!(first);
+
+        let second = merge_specific_peers(&doc_handle, root, &["peer-a".to_string()]);
+        assert!(!second, "second merge of same data should return false");
     }
 }

@@ -119,7 +119,7 @@ pub async fn init_repo(
 }
 
 pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: &str) -> bool {
-    let mut changed = false;
+    let heads_before = doc_handle.with_doc(|doc| doc.get_heads());
     for entry in std::fs::read_dir(sync_root).into_iter().flatten().flatten() {
         let peer_dir = entry.path();
         if !peer_dir.is_dir() {
@@ -143,17 +143,16 @@ pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: 
             if let Ok(data) = std::fs::read(file_path) {
                 doc_handle.with_doc_mut(|doc| {
                     if let Ok(mut peer_doc) = Automerge::load(&data) {
-                        if doc.merge(&mut peer_doc).is_ok() {
-                            changed = true;
-                        }
-                    } else if doc.load_incremental(&data).is_ok() {
-                        changed = true;
+                        let _ = doc.merge(&mut peer_doc);
+                    } else {
+                        let _ = doc.load_incremental(&data);
                     }
                 });
             }
         }
     }
-    changed
+    let heads_after = doc_handle.with_doc(|doc| doc.get_heads());
+    heads_before != heads_after
 }
 
 /// # Errors
@@ -188,5 +187,108 @@ fn walk_files_inner(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
         } else if path.is_file() {
             files.push(path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use automerge::transaction::Transactable;
+
+    fn make_peer_snapshot(sync_root: &Path, peer_id: &str, doc: &Automerge) {
+        let store = sync_root.join(peer_id).join("store");
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(store.join("document.snapshot"), doc.save()).unwrap();
+    }
+
+    fn make_doc_handle(dir: &Path) -> (automerge_repo::RepoHandle, automerge_repo::DocHandle) {
+        let store = automerge_repo::tokio::FsStorage::open(dir.join("repo_store")).unwrap();
+        let repo = automerge_repo::Repo::new(None, Box::new(store));
+        let repo_handle = repo.run();
+        let doc_handle = repo_handle.new_document();
+        (repo_handle, doc_handle)
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn full_merge_pass_returns_false_when_no_new_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        doc_handle.with_doc_mut(|doc| {
+            let mut tx = doc.transaction();
+            tx.put(automerge::ROOT, "key", "value").unwrap();
+            tx.commit();
+        });
+
+        let local_save = doc_handle.with_doc(|doc| doc.save());
+        let peer_store = sync_root.join("peer-a").join("store");
+        std::fs::create_dir_all(&peer_store).unwrap();
+        std::fs::write(peer_store.join("document.snapshot"), &local_save).unwrap();
+
+        let changed = full_merge_pass(&doc_handle, sync_root, "my-client");
+        assert!(!changed, "merge of already-known data should return false");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn full_merge_pass_returns_true_when_peer_has_new_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        let mut peer_doc = Automerge::new();
+        let mut tx = peer_doc.transaction();
+        tx.put(automerge::ROOT, "peer_key", "peer_value").unwrap();
+        tx.commit();
+
+        make_peer_snapshot(sync_root, "peer-a", &peer_doc);
+
+        let changed = full_merge_pass(&doc_handle, sync_root, "my-client");
+        assert!(changed, "merge of new peer data should return true");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn full_merge_pass_idempotent_on_second_call() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        let mut peer_doc = Automerge::new();
+        let mut tx = peer_doc.transaction();
+        tx.put(automerge::ROOT, "key", "value").unwrap();
+        tx.commit();
+
+        make_peer_snapshot(sync_root, "peer-a", &peer_doc);
+
+        let first = full_merge_pass(&doc_handle, sync_root, "my-client");
+        assert!(first);
+
+        let second = full_merge_pass(&doc_handle, sync_root, "my-client");
+        assert!(!second, "second merge of same data should return false");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn full_merge_pass_skips_own_client_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        let mut peer_doc = Automerge::new();
+        let mut tx = peer_doc.transaction();
+        tx.put(automerge::ROOT, "key", "value").unwrap();
+        tx.commit();
+
+        make_peer_snapshot(sync_root, "my-client", &peer_doc);
+
+        let changed = full_merge_pass(&doc_handle, sync_root, "my-client");
+        assert!(!changed, "should skip own client directory");
     }
 }
