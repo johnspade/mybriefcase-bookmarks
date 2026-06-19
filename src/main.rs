@@ -145,6 +145,11 @@ fn spawn_watcher(state: &Arc<state::AppState>) {
                 &changed_peers,
             );
             if did_change {
+                let _ = repo::export_doc_to_shared(
+                    &watcher_state.doc_handle,
+                    &watcher_state.sync_root,
+                    &watcher_state.client_id,
+                );
                 let _ = watcher_state.sse_tx.send(());
                 eprintln!("Merged changes from peers: {}", changed_peers.join(", "));
             }
@@ -166,6 +171,7 @@ fn spawn_poller(state: &Arc<state::AppState>) {
             }
             let did_merge = watcher::merge_specific_peers(&st.doc_handle, &st.sync_root, &changed);
             if did_merge {
+                let _ = repo::export_doc_to_shared(&st.doc_handle, &st.sync_root, &st.client_id);
                 let _ = st.sse_tx.send(());
                 eprintln!("Poll: merged changes from peers: {}", changed.join(", "));
             }
