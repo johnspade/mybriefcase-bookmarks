@@ -177,6 +177,7 @@ pub fn export_doc_to_shared(
     let tmp = dest.with_extension("tmp");
     std::fs::write(&tmp, &data)?;
     std::fs::rename(&tmp, &dest)?;
+    std::fs::File::open(&dest)?.set_modified(std::time::SystemTime::now())?;
     Ok(())
 }
 
@@ -244,6 +245,7 @@ impl DebouncedExporter {
         let tmp = dest.with_extension("tmp");
         std::fs::write(&tmp, &data)?;
         std::fs::rename(&tmp, &dest)?;
+        std::fs::File::open(&dest)?.set_modified(std::time::SystemTime::now())?;
         Ok(())
     }
 }
