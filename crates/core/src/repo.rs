@@ -2,13 +2,17 @@ use automerge::transaction::Transactable;
 use automerge::{Automerge, ObjType};
 use automerge_repo::tokio::FsStorage;
 use automerge_repo::{DocHandle, DocumentId, Repo, RepoHandle};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use crate::error::CoreError;
 use crate::schema::BookmarkField::Deleted;
 use crate::schema::BookmarkStoreField::{Bookmarks, Folders, Meta, RootFolderId};
 use crate::schema::FolderField::{Children, CreatedAt, Title, UpdatedAt};
 use crate::schema::StoreMetaField::{CollectionName, SchemaVersion};
+
+const DEFAULT_DEBOUNCE: Duration = Duration::from_secs(4);
 
 /// # Errors
 /// Returns `CoreError::Io` if filesystem operations fail, or `CoreError::DocumentCorrupted`
@@ -48,6 +52,9 @@ pub async fn init_repo(
             .await
             .map_err(|e| CoreError::Io(std::io::Error::other(format!("{e:?}"))))?
         {
+            // Merge from own export to recover changes that were exported but not
+            // flushed to FsStorage before the process was killed.
+            merge_own_export(&handle, sync_root, client_id);
             return Ok((repo_handle, handle, doc_id));
         }
 
@@ -173,6 +180,90 @@ pub fn export_doc_to_shared(
     Ok(())
 }
 
+/// Rate-limited exporter that prevents writing more than once per debounce interval.
+///
+/// Syncthing hashes files to detect changes; writing twice during a hash causes
+/// "file changed during hashing" errors and expensive retries.
+#[must_use]
+pub struct DebouncedExporter {
+    dest: PathBuf,
+    debounce: Duration,
+    last_export: Mutex<Option<Instant>>,
+}
+
+impl DebouncedExporter {
+    pub fn new(sync_root: &Path, client_id: &str) -> Self {
+        Self {
+            dest: sync_root.join(client_id).join("store"),
+            debounce: DEFAULT_DEBOUNCE,
+            last_export: Mutex::new(None),
+        }
+    }
+
+    /// Export only if the debounce interval has elapsed since the last write.
+    ///
+    /// Returns `Ok(true)` if exported, `Ok(false)` if skipped.
+    ///
+    /// # Errors
+    /// Returns `CoreError::Io` if the filesystem write fails.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn export_debounced(&self, doc_handle: &DocHandle) -> Result<bool, CoreError> {
+        let mut last = self.last_export.lock().unwrap();
+        if let Some(t) = *last {
+            if t.elapsed() < self.debounce {
+                return Ok(false);
+            }
+        }
+        self.write(doc_handle)?;
+        *last = Some(Instant::now());
+        drop(last);
+        Ok(true)
+    }
+
+    /// Export unconditionally, ignoring the debounce interval.
+    ///
+    /// Use for shutdown or forced flush (e.g., after merge).
+    ///
+    /// # Errors
+    /// Returns `CoreError::Io` if the filesystem write fails.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn export_now(&self, doc_handle: &DocHandle) -> Result<(), CoreError> {
+        self.write(doc_handle)?;
+        *self.last_export.lock().unwrap() = Some(Instant::now());
+        Ok(())
+    }
+
+    fn write(&self, doc_handle: &DocHandle) -> Result<(), CoreError> {
+        std::fs::create_dir_all(&self.dest)?;
+        let data = doc_handle.with_doc(automerge::Automerge::save);
+        let dest = self.dest.join("document.snapshot");
+        let tmp = dest.with_extension("tmp");
+        std::fs::write(&tmp, &data)?;
+        std::fs::rename(&tmp, &dest)?;
+        Ok(())
+    }
+}
+
+/// Merge from own export file to recover changes that were written to the sync
+/// directory but not flushed to `FsStorage` before process termination.
+fn merge_own_export(doc_handle: &DocHandle, sync_root: &Path, client_id: &str) {
+    let snapshot = sync_root
+        .join(client_id)
+        .join("store")
+        .join("document.snapshot");
+    if let Ok(data) = std::fs::read(&snapshot) {
+        doc_handle.with_doc_mut(|doc| {
+            if let Ok(mut peer_doc) = Automerge::load(&data) {
+                let _ = doc.merge(&mut peer_doc);
+            }
+        });
+    }
+}
+
 fn walk_files(dir: &Path) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
     walk_files_inner(dir, &mut files);
@@ -184,15 +275,24 @@ fn walk_files_inner(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
         let path = entry.path();
         if path.is_dir() {
             walk_files_inner(&path, files);
-        } else if path.is_file() {
+        } else if path.is_file() && !is_temp_file(&path) {
             files.push(path);
         }
     }
 }
 
+fn is_temp_file(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("tmp"))
+        || name.starts_with(".syncthing.")
+        || name.ends_with(".syncthing")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use automerge::ReadDoc;
     use automerge::transaction::Transactable;
 
     fn make_peer_snapshot(sync_root: &Path, peer_id: &str, doc: &Automerge) {
@@ -290,5 +390,51 @@ mod tests {
 
         let changed = full_merge_pass(&doc_handle, sync_root, "my-client");
         assert!(!changed, "should skip own client directory");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn merge_own_export_recovers_unflushed_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let sync_root = dir.path();
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        // Simulate a change that was exported but not flushed to FsStorage:
+        // write directly to own export path.
+        let mut exported_doc = Automerge::new();
+        let mut tx = exported_doc.transaction();
+        tx.put(automerge::ROOT, "recovered_key", "recovered_value")
+            .unwrap();
+        tx.commit();
+
+        make_peer_snapshot(sync_root, "my-client", &exported_doc);
+
+        // merge_own_export should bring the change back
+        merge_own_export(&doc_handle, sync_root, "my-client");
+
+        let val: Option<String> = doc_handle.with_doc(|doc| {
+            doc.get(automerge::ROOT, "recovered_key")
+                .ok()
+                .flatten()
+                .map(|(v, _)| v.into_string().unwrap())
+        });
+        assert_eq!(val.as_deref(), Some("recovered_value"));
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn walk_files_skips_temp_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("store");
+        std::fs::create_dir_all(&store).unwrap();
+
+        std::fs::write(store.join("document.snapshot"), b"good").unwrap();
+        std::fs::write(store.join("document.tmp"), b"temp").unwrap();
+        std::fs::write(store.join(".syncthing.document.snapshot"), b"syncthing").unwrap();
+
+        let files = walk_files(&store);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("document.snapshot"));
     }
 }
