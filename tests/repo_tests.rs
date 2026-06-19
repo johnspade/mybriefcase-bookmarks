@@ -213,7 +213,7 @@ async fn init_repo_fresh() {
     let local_dir = TempDir::new().unwrap();
     let sync_root = TempDir::new().unwrap();
 
-    let (_repo_handle, doc_handle, _doc_id) = repo::init_repo(
+    let (_repo_handle, doc_handle) = repo::init_repo(
         local_dir.path(),
         sync_root.path(),
         "test-client",

@@ -201,7 +201,7 @@ async fn main() {
     eprintln!("Sync root: {}", cfg.sync_root.display());
     eprintln!("Local data: {}", cfg.local_data_dir.display());
 
-    let (_repo_handle, doc_handle, _document_id) = repo::init_repo(
+    let (_repo_handle, doc_handle) = repo::init_repo(
         &cfg.local_data_dir,
         &cfg.sync_root,
         &client_id,
