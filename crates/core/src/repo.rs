@@ -59,8 +59,9 @@ pub async fn init_repo(
             return Ok((repo_handle, handle, doc_id));
         }
 
-        // Not in local storage: create a new doc and merge from peers.
+        // Not in local storage: create a new doc and merge from all sources.
         let handle = repo_handle.new_document();
+        merge_own_export(&handle, sync_root, client_id);
         full_merge_pass(&handle, sync_root, client_id);
         let actual_id = handle.document_id();
         Ok((repo_handle, handle, actual_id))
@@ -501,6 +502,63 @@ mod tests {
             .join("document.snapshot");
         let actual_mtime = std::fs::metadata(&snapshot).unwrap().modified().unwrap();
         assert_eq!(actual_mtime, mtime);
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn init_repo_without_fsstorage_recovers_own_export() {
+        // Simulates the Android swipe-kill scenario:
+        // FsStorage doesn't have the doc_id, but the sync dir has a valid export.
+        let dir = tempfile::tempdir().unwrap();
+        let data_dir = dir.path().join("data");
+        let sync_root = dir.path().join("sync");
+        std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::create_dir_all(&sync_root).unwrap();
+
+        let client_id = "my-phone";
+        let now = chrono::Utc::now();
+
+        // First init creates the doc and writes metadata.
+        let (_rh, doc_handle, _doc_id) =
+            init_repo(&data_dir, &sync_root, client_id, now).await.unwrap();
+
+        // Add data and export to sync dir (simulating a normal mutation + export_now).
+        doc_handle.with_doc_mut(|doc| {
+            let mut tx = doc.transaction();
+            tx.put(automerge::ROOT, "local_change", "important_value")
+                .unwrap();
+            tx.commit();
+        });
+        export_doc_to_shared(
+            &doc_handle,
+            &sync_root,
+            client_id,
+            std::time::SystemTime::now(),
+        )
+        .unwrap();
+
+        // Drop everything and start with FRESH data_dir (simulates FsStorage not having the doc).
+        drop(doc_handle);
+        let fresh_data_dir = dir.path().join("data2");
+        std::fs::create_dir_all(&fresh_data_dir).unwrap();
+
+        // Re-init: should recover the local change from own export.
+        let (_rh2, doc_handle2, _) =
+            init_repo(&fresh_data_dir, &sync_root, client_id, now)
+                .await
+                .unwrap();
+
+        let val: Option<String> = doc_handle2.with_doc(|doc| {
+            doc.get(automerge::ROOT, "local_change")
+                .ok()
+                .flatten()
+                .map(|(v, _)| v.into_string().unwrap())
+        });
+        assert_eq!(
+            val.as_deref(),
+            Some("important_value"),
+            "own export should be recovered when FsStorage is empty"
+        );
     }
 
     #[tokio::test]
