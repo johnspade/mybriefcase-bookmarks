@@ -91,7 +91,7 @@ pub fn build_app(
     client_id: String,
 ) -> Router {
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
-    let exporter = repo::DebouncedExporter::new(&sync_root, &client_id);
+    let exporter = repo::Exporter::new(&sync_root, &client_id);
     let state = Arc::new(state::AppState {
         doc_handle,
         sync_root,
