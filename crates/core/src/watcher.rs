@@ -78,7 +78,7 @@ pub fn merge_specific_peers(
     sync_root: &Path,
     peers: &[String],
 ) -> bool {
-    let heads_before = doc_handle.with_doc(|doc| doc.get_heads());
+    let heads_before = doc_handle.with_doc(automerge::Automerge::get_heads);
     for peer_id in peers {
         let store_dir = sync_root.join(peer_id).join("store");
         if !store_dir.is_dir() {
@@ -97,7 +97,7 @@ pub fn merge_specific_peers(
             }
         }
     }
-    let heads_after = doc_handle.with_doc(|doc| doc.get_heads());
+    let heads_after = doc_handle.with_doc(automerge::Automerge::get_heads);
     heads_before != heads_after
 }
 
@@ -435,8 +435,7 @@ mod tests {
     }
 
     fn make_doc_handle(dir: &Path) -> (automerge_repo::RepoHandle, automerge_repo::DocHandle) {
-        let store =
-            automerge_repo::tokio::FsStorage::open(dir.join("repo_store")).unwrap();
+        let store = automerge_repo::tokio::FsStorage::open(dir.join("repo_store")).unwrap();
         let repo = automerge_repo::Repo::new(None, Box::new(store));
         let repo_handle = repo.run();
         let doc_handle = repo_handle.new_document();

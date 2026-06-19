@@ -119,7 +119,7 @@ pub async fn init_repo(
 }
 
 pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: &str) -> bool {
-    let heads_before = doc_handle.with_doc(|doc| doc.get_heads());
+    let heads_before = doc_handle.with_doc(automerge::Automerge::get_heads);
     for entry in std::fs::read_dir(sync_root).into_iter().flatten().flatten() {
         let peer_dir = entry.path();
         if !peer_dir.is_dir() {
@@ -151,7 +151,7 @@ pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: 
             }
         }
     }
-    let heads_after = doc_handle.with_doc(|doc| doc.get_heads());
+    let heads_after = doc_handle.with_doc(automerge::Automerge::get_heads);
     heads_before != heads_after
 }
 
