@@ -25,7 +25,7 @@ pub async fn init_repo(
     sync_root: &Path,
     client_id: &str,
     now: chrono::DateTime<chrono::Utc>,
-) -> Result<(RepoHandle, DocHandle, DocumentId), CoreError> {
+) -> Result<(RepoHandle, DocHandle), CoreError> {
     let local_store_path = local_data_dir.join("repo_store");
     std::fs::create_dir_all(&local_store_path)?;
     let store = FsStorage::open(&local_store_path)
@@ -33,37 +33,33 @@ pub async fn init_repo(
     let repo = Repo::new(Some(client_id.to_string()), Box::new(store));
     let repo_handle = repo.run();
 
+    let local_id_path = local_data_dir.join("local_doc_id");
     let sync_info_path = sync_root.join(".bookmarks-sync");
 
-    if sync_info_path.exists() {
-        // Existing sync folder. Try loading from local storage first.
-        let raw = std::fs::read_to_string(&sync_info_path)?;
-        let info: serde_json::Value =
-            serde_json::from_str(&raw).map_err(|e| CoreError::DocumentCorrupted(e.to_string()))?;
-        let doc_id: DocumentId = info["document_id"]
-            .as_str()
-            .ok_or_else(|| {
-                CoreError::DocumentCorrupted("missing document_id in sync metadata".into())
-            })?
-            .parse()
-            .map_err(|_| CoreError::DocumentCorrupted("invalid document_id format".into()))?;
-
+    if let Some(doc_id) = read_local_doc_id(&local_id_path) {
+        // We have a persisted local doc ID. Try loading it from FsStorage.
         if let Some(handle) = repo_handle
-            .load(doc_id.clone())
+            .load(doc_id)
             .await
             .map_err(|e| CoreError::Io(std::io::Error::other(format!("{e:?}"))))?
         {
-            // Merge from own export to recover changes that were exported but not
-            // flushed to FsStorage before the process was killed.
             merge_own_export(&handle, sync_root, client_id);
-            return Ok((repo_handle, handle, doc_id));
+            return Ok((repo_handle, handle));
         }
 
-        // Not in local storage: create a new doc and merge from peers.
+        // FsStorage lost it. Rebuild from sync exports.
         let handle = repo_handle.new_document();
+        merge_own_export(&handle, sync_root, client_id);
         full_merge_pass(&handle, sync_root, client_id);
-        let actual_id = handle.document_id();
-        Ok((repo_handle, handle, actual_id))
+        write_local_doc_id(&local_id_path, &handle.document_id())?;
+        Ok((repo_handle, handle))
+    } else if sync_info_path.exists() {
+        // New device joining an existing sync folder. Rebuild from peers.
+        let handle = repo_handle.new_document();
+        merge_own_export(&handle, sync_root, client_id);
+        full_merge_pass(&handle, sync_root, client_id);
+        write_local_doc_id(&local_id_path, &handle.document_id())?;
+        Ok((repo_handle, handle))
     } else {
         // First client: create document with default folder structure.
         let handle = repo_handle.new_document();
@@ -112,18 +108,28 @@ pub async fn init_repo(
             tx.commit();
         });
 
-        let doc_id = handle.document_id();
+        write_local_doc_id(&local_id_path, &handle.document_id())?;
         let info = serde_json::json!({
             "version": 1,
             "engine": "automerge-repo",
             "app": "mybriefcase-bookmarks",
-            "schema_version": 1,
-            "document_id": doc_id.to_string()
+            "schema_version": 1
         });
         std::fs::create_dir_all(sync_root)?;
         std::fs::write(&sync_info_path, info.to_string())?;
-        Ok((repo_handle, handle, doc_id))
+        Ok((repo_handle, handle))
     }
+}
+
+fn read_local_doc_id(path: &Path) -> Option<DocumentId> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+}
+
+fn write_local_doc_id(path: &Path, doc_id: &DocumentId) -> Result<(), CoreError> {
+    std::fs::write(path, doc_id.to_string())?;
+    Ok(())
 }
 
 pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: &str) -> bool {
@@ -501,6 +507,138 @@ mod tests {
             .join("document.snapshot");
         let actual_mtime = std::fs::metadata(&snapshot).unwrap().modified().unwrap();
         assert_eq!(actual_mtime, mtime);
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn init_repo_persists_local_doc_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let data_dir = dir.path().join("data");
+        let sync_root = dir.path().join("sync");
+        std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::create_dir_all(&sync_root).unwrap();
+
+        let now = chrono::Utc::now();
+        let (_rh, doc_handle) = init_repo(&data_dir, &sync_root, "client-a", now)
+            .await
+            .unwrap();
+
+        let local_id_path = data_dir.join("local_doc_id");
+        assert!(local_id_path.exists());
+        let stored: DocumentId = std::fs::read_to_string(&local_id_path)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert_eq!(stored, doc_handle.document_id());
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn init_repo_fsstorage_lost_doc_recovers_from_export() {
+        // Simulates the Android swipe-kill scenario:
+        // local_doc_id exists but FsStorage doesn't have the doc.
+        let dir = tempfile::tempdir().unwrap();
+        let data_dir = dir.path().join("data");
+        let sync_root = dir.path().join("sync");
+        std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::create_dir_all(&sync_root).unwrap();
+
+        let client_id = "my-phone";
+        let now = chrono::Utc::now();
+
+        // First init creates the doc.
+        let (rh, doc_handle) = init_repo(&data_dir, &sync_root, client_id, now)
+            .await
+            .unwrap();
+        let doc_id = doc_handle.document_id();
+
+        // Add data and export to sync dir.
+        doc_handle.with_doc_mut(|doc| {
+            let mut tx = doc.transaction();
+            tx.put(automerge::ROOT, "local_change", "important_value")
+                .unwrap();
+            tx.commit();
+        });
+        export_doc_to_shared(
+            &doc_handle,
+            &sync_root,
+            client_id,
+            std::time::SystemTime::now(),
+        )
+        .unwrap();
+        drop(doc_handle);
+        drop(rh);
+
+        // Simulate FsStorage loss: use a fresh data_dir but carry over local_doc_id.
+        let fresh_data_dir = dir.path().join("data2");
+        std::fs::create_dir_all(&fresh_data_dir).unwrap();
+        std::fs::write(fresh_data_dir.join("local_doc_id"), doc_id.to_string()).unwrap();
+
+        // Re-init: should recover the local change from own export.
+        let (_rh2, doc_handle2) = init_repo(&fresh_data_dir, &sync_root, client_id, now)
+            .await
+            .unwrap();
+
+        let val: Option<String> = doc_handle2.with_doc(|doc| {
+            doc.get(automerge::ROOT, "local_change")
+                .ok()
+                .flatten()
+                .map(|(v, _)| v.into_string().unwrap())
+        });
+        assert_eq!(
+            val.as_deref(),
+            Some("important_value"),
+            "own export should be recovered when FsStorage is empty"
+        );
+
+        // local_doc_id should be updated to the new actual ID.
+        assert!(fresh_data_dir.join("local_doc_id").exists());
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn init_repo_new_device_joins_existing_sync() {
+        // A new device (no local_doc_id) joining a sync folder with peer exports.
+        let dir = tempfile::tempdir().unwrap();
+        let data_dir = dir.path().join("data");
+        let sync_root = dir.path().join("sync");
+        std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::create_dir_all(&sync_root).unwrap();
+
+        // Create the sync metadata (as if another device created it).
+        let sync_info = serde_json::json!({
+            "version": 1,
+            "engine": "automerge-repo",
+            "app": "mybriefcase-bookmarks",
+            "schema_version": 1
+        });
+        std::fs::write(sync_root.join(".bookmarks-sync"), sync_info.to_string()).unwrap();
+
+        // Create a peer export with data.
+        let mut peer_doc = Automerge::new();
+        let mut tx = peer_doc.transaction();
+        tx.put(automerge::ROOT, "peer_key", "peer_value").unwrap();
+        tx.commit();
+        make_peer_snapshot(&sync_root, "desktop", &peer_doc);
+
+        // New device init (no local_doc_id file).
+        let now = chrono::Utc::now();
+        let (_rh, doc_handle) = init_repo(&data_dir, &sync_root, "my-phone", now)
+            .await
+            .unwrap();
+
+        // Should have merged peer data.
+        let val: Option<String> = doc_handle.with_doc(|doc| {
+            doc.get(automerge::ROOT, "peer_key")
+                .ok()
+                .flatten()
+                .map(|(v, _)| v.into_string().unwrap())
+        });
+        assert_eq!(val.as_deref(), Some("peer_value"));
+
+        // local_doc_id should be written.
+        assert!(data_dir.join("local_doc_id").exists());
     }
 
     #[tokio::test]
