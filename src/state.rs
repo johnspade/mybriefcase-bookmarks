@@ -1,5 +1,6 @@
 use automerge_repo::DocHandle;
 use mybriefcase_bookmarks_core::error::CoreError;
+use mybriefcase_bookmarks_core::repo::DebouncedExporter;
 use std::path::PathBuf;
 
 pub struct AppState {
@@ -8,11 +9,12 @@ pub struct AppState {
     pub client_id: String,
     pub sse_tx: tokio::sync::broadcast::Sender<()>,
     pub static_version: String,
+    pub exporter: DebouncedExporter,
 }
 
 impl AppState {
     fn after_write(&self) -> Result<(), CoreError> {
-        crate::repo::export_doc_to_shared(&self.doc_handle, &self.sync_root, &self.client_id)?;
+        self.exporter.export_now(&self.doc_handle)?;
         let _ = self.sse_tx.send(());
         Ok(())
     }

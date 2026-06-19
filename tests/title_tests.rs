@@ -13,6 +13,7 @@ use http_body_util::BodyExt;
 use mybriefcase_bookmarks::handlers;
 use mybriefcase_bookmarks::model::BookmarkStore;
 use mybriefcase_bookmarks::ops;
+use mybriefcase_bookmarks::repo;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -24,12 +25,14 @@ fn build_html_app(
     client_id: String,
 ) -> Router {
     let (sse_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let exporter = repo::DebouncedExporter::new(&sync_root, &client_id);
     let state = Arc::new(mybriefcase_bookmarks::state::AppState {
         doc_handle,
         sync_root,
         client_id,
         sse_tx,
         static_version: "test".to_string(),
+        exporter,
     });
 
     Router::new()

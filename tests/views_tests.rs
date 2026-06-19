@@ -14,7 +14,7 @@ use tower::ServiceExt;
 
 use common::new_initialized_doc;
 use mybriefcase_bookmarks::views::SortOrder;
-use mybriefcase_bookmarks::{handlers, history, ops, state};
+use mybriefcase_bookmarks::{handlers, history, ops, repo, state};
 
 fn build_views_app() -> (Router, String) {
     let td = new_initialized_doc("test-views");
@@ -27,6 +27,7 @@ fn build_views_app() -> (Router, String) {
         client_id: "test-views".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(sync_root.path(), "test-views"),
     });
     let app = Router::new()
         .route("/folders/{id}/content", get(handlers::folder_content))
@@ -65,6 +66,7 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
         client_id: "test-views".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(sync_root.path(), "test-views"),
     });
     let app = Router::new()
         .route("/folders/{id}/content", get(handlers::folder_content))
@@ -1480,6 +1482,7 @@ fn build_views_app_with_sync_root() -> (
         client_id: "test-views".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(&sync_root_path, "test-views"),
     });
     let app = Router::new()
         .route("/folders/{id}/content", get(handlers::folder_content))
@@ -1825,6 +1828,7 @@ async fn serve_favicon_content_type_png() {
         client_id: "test-favicon-ct".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(sync_root.path(), "test-favicon-ct"),
     });
     let app = Router::new()
         .route("/favicons/{filename}", get(handlers::serve_favicon))
@@ -1860,6 +1864,7 @@ async fn serve_favicon_content_type_ico() {
         client_id: "test-favicon-ico".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(sync_root.path(), "test-favicon-ico"),
     });
     let app = Router::new()
         .route("/favicons/{filename}", get(handlers::serve_favicon))
@@ -1895,6 +1900,7 @@ async fn serve_favicon_content_type_svg() {
         client_id: "test-favicon-svg".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(sync_root.path(), "test-favicon-svg"),
     });
     let app = Router::new()
         .route("/favicons/{filename}", get(handlers::serve_favicon))
@@ -1930,6 +1936,7 @@ async fn serve_favicon_content_type_jpg() {
         client_id: "test-favicon-jpg".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(sync_root.path(), "test-favicon-jpg"),
     });
     let app = Router::new()
         .route("/favicons/{filename}", get(handlers::serve_favicon))
@@ -1965,6 +1972,7 @@ async fn serve_favicon_content_type_gif() {
         client_id: "test-favicon-gif".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(sync_root.path(), "test-favicon-gif"),
     });
     let app = Router::new()
         .route("/favicons/{filename}", get(handlers::serve_favicon))
@@ -2000,6 +2008,7 @@ async fn serve_favicon_content_type_webp() {
         client_id: "test-favicon-webp".to_string(),
         sse_tx,
         static_version: "test".to_string(),
+        exporter: repo::DebouncedExporter::new(sync_root.path(), "test-favicon-webp"),
     });
     let app = Router::new()
         .route("/favicons/{filename}", get(handlers::serve_favicon))

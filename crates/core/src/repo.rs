@@ -2,13 +2,17 @@ use automerge::transaction::Transactable;
 use automerge::{Automerge, ObjType};
 use automerge_repo::tokio::FsStorage;
 use automerge_repo::{DocHandle, DocumentId, Repo, RepoHandle};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use crate::error::CoreError;
 use crate::schema::BookmarkField::Deleted;
 use crate::schema::BookmarkStoreField::{Bookmarks, Folders, Meta, RootFolderId};
 use crate::schema::FolderField::{Children, CreatedAt, Title, UpdatedAt};
 use crate::schema::StoreMetaField::{CollectionName, SchemaVersion};
+
+const DEFAULT_DEBOUNCE: Duration = Duration::from_secs(4);
 
 /// # Errors
 /// Returns `CoreError::Io` if filesystem operations fail, or `CoreError::DocumentCorrupted`
@@ -174,6 +178,74 @@ pub fn export_doc_to_shared(
     std::fs::write(&tmp, &data)?;
     std::fs::rename(&tmp, &dest)?;
     Ok(())
+}
+
+/// Rate-limited exporter that prevents writing more than once per debounce interval.
+///
+/// Syncthing hashes files to detect changes; writing twice during a hash causes
+/// "file changed during hashing" errors and expensive retries.
+#[must_use]
+pub struct DebouncedExporter {
+    dest: PathBuf,
+    debounce: Duration,
+    last_export: Mutex<Option<Instant>>,
+}
+
+impl DebouncedExporter {
+    pub fn new(sync_root: &Path, client_id: &str) -> Self {
+        Self {
+            dest: sync_root.join(client_id).join("store"),
+            debounce: DEFAULT_DEBOUNCE,
+            last_export: Mutex::new(None),
+        }
+    }
+
+    /// Export only if the debounce interval has elapsed since the last write.
+    ///
+    /// Returns `Ok(true)` if exported, `Ok(false)` if skipped.
+    ///
+    /// # Errors
+    /// Returns `CoreError::Io` if the filesystem write fails.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn export_debounced(&self, doc_handle: &DocHandle) -> Result<bool, CoreError> {
+        let mut last = self.last_export.lock().unwrap();
+        if let Some(t) = *last {
+            if t.elapsed() < self.debounce {
+                return Ok(false);
+            }
+        }
+        self.write(doc_handle)?;
+        *last = Some(Instant::now());
+        drop(last);
+        Ok(true)
+    }
+
+    /// Export unconditionally, ignoring the debounce interval.
+    ///
+    /// Use for shutdown or forced flush (e.g., after merge).
+    ///
+    /// # Errors
+    /// Returns `CoreError::Io` if the filesystem write fails.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn export_now(&self, doc_handle: &DocHandle) -> Result<(), CoreError> {
+        self.write(doc_handle)?;
+        *self.last_export.lock().unwrap() = Some(Instant::now());
+        Ok(())
+    }
+
+    fn write(&self, doc_handle: &DocHandle) -> Result<(), CoreError> {
+        std::fs::create_dir_all(&self.dest)?;
+        let data = doc_handle.with_doc(automerge::Automerge::save);
+        let dest = self.dest.join("document.snapshot");
+        let tmp = dest.with_extension("tmp");
+        std::fs::write(&tmp, &data)?;
+        std::fs::rename(&tmp, &dest)?;
+        Ok(())
+    }
 }
 
 /// Merge from own export file to recover changes that were written to the sync
