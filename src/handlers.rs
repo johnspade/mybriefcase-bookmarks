@@ -289,7 +289,8 @@ fn render_folder_response(
     let folder_title = store
         .folders
         .get(&effective_id)
-        .map_or("Bookmarks", |f| f.title.as_str()).to_owned();
+        .map_or("Bookmarks", |f| f.title.as_str())
+        .to_owned();
     let total_items = folders.len() + bookmarks.len();
 
     let content = render(&FolderContentTemplate {
@@ -505,7 +506,8 @@ pub async fn bookmark_edit_form(
     };
 
     let current_folder_id = find_folder_for_bookmark(&store, &id)
-        .unwrap_or(&store.root_folder_id).to_owned();
+        .unwrap_or(&store.root_folder_id)
+        .to_owned();
     let mut folders = Vec::new();
     let exclude = std::collections::HashSet::new();
     collect_folder_paths(
@@ -637,7 +639,8 @@ pub async fn update_bookmark_html(
                     autosurgeon::hydrate(d).map_err(|e| CoreError::DocumentCorrupted(e.to_string()))
                 })?;
                 let current_folder_id = find_folder_for_bookmark(&store, &id)
-                    .unwrap_or(&store.root_folder_id).to_owned();
+                    .unwrap_or(&store.root_folder_id)
+                    .to_owned();
                 if *new_folder_id != current_folder_id {
                     ops::move_item(doc, &id, &current_folder_id, new_folder_id)?;
                 }
@@ -652,14 +655,16 @@ pub async fn update_bookmark_html(
     };
 
     let folder_id = find_folder_for_bookmark(&store, &id)
-        .unwrap_or(&store.root_folder_id).to_owned();
+        .unwrap_or(&store.root_folder_id)
+        .to_owned();
     let sidebar_html = build_sidebar_html(&store, &folder_id);
     let (folders, bookmarks) = build_folder_items(&store, &folder_id, SortOrder::default());
     let breadcrumbs = build_breadcrumbs(&store, &folder_id);
     let folder_title = store
         .folders
         .get(&folder_id)
-        .map_or("Bookmarks", |f| f.title.as_str()).to_owned();
+        .map_or("Bookmarks", |f| f.title.as_str())
+        .to_owned();
     let total_items = folders.len() + bookmarks.len();
 
     let detail = render(&DetailBookmarkTemplate {
@@ -1073,14 +1078,16 @@ pub async fn revert_bookmark_html(
     };
 
     let folder_id = find_folder_for_bookmark(&store, &id)
-        .unwrap_or(&store.root_folder_id).to_owned();
+        .unwrap_or(&store.root_folder_id)
+        .to_owned();
     let sidebar_html = build_sidebar_html(&store, &folder_id);
     let (folders, bookmarks) = build_folder_items(&store, &folder_id, SortOrder::default());
     let breadcrumbs = build_breadcrumbs(&store, &folder_id);
     let folder_title = store
         .folders
         .get(&folder_id)
-        .map_or("Bookmarks", |f| f.title.as_str()).to_owned();
+        .map_or("Bookmarks", |f| f.title.as_str())
+        .to_owned();
     let total_items = folders.len() + bookmarks.len();
 
     let detail = render(&DetailBookmarkTemplate {

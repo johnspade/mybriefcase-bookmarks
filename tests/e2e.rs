@@ -143,7 +143,7 @@ impl TestClient {
 
     async fn poll_until_bookmark(&self, description: &str, base: &str, title: &str) {
         let deadline = Duration::from_secs(10);
-        let title = title.to_string();
+        let title = title.to_owned();
 
         timeout(deadline, async {
             loop {
@@ -184,7 +184,7 @@ impl TestClient {
 }
 
 fn tree_root_id(tree: &serde_json::Value) -> String {
-    tree["root_folder_id"].as_str().unwrap().to_string()
+    tree["root_folder_id"].as_str().unwrap().to_owned()
 }
 
 fn find_folder_id(tree: &serde_json::Value, title: &str) -> String {
@@ -196,11 +196,11 @@ fn find_folder_id(tree: &serde_json::Value, title: &str) -> String {
         .unwrap()["id"]
         .as_str()
         .unwrap()
-        .to_string()
+        .to_owned()
 }
 
 fn resp_id(resp: &serde_json::Value) -> String {
-    resp["id"].as_str().unwrap().to_string()
+    resp["id"].as_str().unwrap().to_owned()
 }
 
 fn start_server<'a>(
@@ -254,10 +254,10 @@ async fn live_bidirectional_sync() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|b| b["title"].as_str().unwrap().to_string())
+        .map(|b| b["title"].as_str().unwrap().to_owned())
         .collect();
-    assert!(b_titles.contains(&"Rust".to_string()));
-    assert!(b_titles.contains(&"Automerge".to_string()));
+    assert!(b_titles.contains(&"Rust".to_owned()));
+    assert!(b_titles.contains(&"Automerge".to_owned()));
 
     tc.create_bookmark(&base_b, &bar_id, "https://syncthing.net", "Syncthing")
         .await;
