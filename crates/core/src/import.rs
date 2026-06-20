@@ -111,7 +111,8 @@ where
                 let url = el
                     .attr("HREF")
                     .or_else(|| el.attr("href"))
-                    .unwrap_or("").to_owned();
+                    .unwrap_or("")
+                    .to_owned();
                 let title = collect_text(doc, child.id());
                 let created_at = el
                     .attr("ADD_DATE")

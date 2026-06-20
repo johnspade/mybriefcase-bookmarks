@@ -402,7 +402,8 @@ async fn revert_restores_bookmark_state() {
     let (_, history) = get_json(app.clone(), &format!("/bookmarks/{bm_id}/history")).await;
     let v1_hash = history.as_array().unwrap().last().unwrap()["hash"]
         .as_str()
-        .unwrap().to_owned();
+        .unwrap()
+        .to_owned();
 
     let status = post_json(
         app.clone(),
