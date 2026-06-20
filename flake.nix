@@ -70,6 +70,7 @@
               Env = [
                 "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
                 "TZDIR=${pkgs.tzdata}/share/zoneinfo"
+                "MBB_HOST=0.0.0.0"
               ];
               ExposedPorts = { "3000/tcp" = {}; };
               Healthcheck = {
