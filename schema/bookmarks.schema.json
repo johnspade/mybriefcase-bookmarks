@@ -39,7 +39,6 @@
       "required": [
         "created_at",
         "deleted",
-        "favicon",
         "notes",
         "title",
         "updated_at",
@@ -56,7 +55,10 @@
           "type": "boolean"
         },
         "favicon": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "notes": {
           "type": "string"

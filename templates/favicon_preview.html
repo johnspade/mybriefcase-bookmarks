@@ -1,6 +1,6 @@
 <div id="favicon-preview">
 {% if !error.is_empty() %}  <div class="favicon-error">{{ error }}</div>
-{% endif %}{% if !favicon.is_empty() %}  <div class="detail-icon-wrap"><img class="favicon favicon-xl" src="/favicons/{{ favicon }}" alt=""></div>
-{% else %}  <div class="detail-icon-wrap"><span class="favicon favicon-xl" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span></div>
-{% endif %}  <input type="hidden" name="favicon" value="{{ favicon }}">
+{% endif %}{% match favicon %}{% when Some with (fav) %}  <div class="detail-icon-wrap"><img class="favicon favicon-xl" src="/favicons/{{ fav }}" alt=""></div>
+{% when None %}  <div class="detail-icon-wrap"><span class="favicon favicon-xl" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span></div>
+{% endmatch %}  <input type="hidden" name="favicon" value="{{ favicon.as_deref().unwrap_or_default() }}">
 </div>

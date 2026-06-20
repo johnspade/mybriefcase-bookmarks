@@ -16,7 +16,7 @@ pub struct SearchHit {
     pub title: String,
     pub url: String,
     pub notes: String,
-    pub favicon: String,
+    pub favicon: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -139,7 +139,7 @@ mod tests {
             title: title.to_owned(),
             url: url.to_owned(),
             notes: notes.to_owned(),
-            favicon: String::new(),
+            favicon: None,
             created_at: "2024-01-01T00:00:00Z".to_owned(),
             updated_at: "2024-01-01T00:00:00Z".to_owned(),
             deleted: false,
