@@ -31,7 +31,7 @@ fn build_html_app(
         sync_root,
         client_id,
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter,
     });
 
@@ -57,7 +57,7 @@ fn make_app() -> (Router, String, automerge_repo::DocHandle) {
     let app = build_html_app(
         td.doc_handle,
         sync_root.path().to_path_buf(),
-        "test-client".to_string(),
+        "test-client".to_owned(),
     );
     std::mem::forget(td.temp_dir);
     std::mem::forget(sync_root);

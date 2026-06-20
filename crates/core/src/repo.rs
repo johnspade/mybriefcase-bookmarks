@@ -26,7 +26,7 @@ pub async fn init_repo(
     std::fs::create_dir_all(&local_store_path)?;
     let store = FsStorage::open(&local_store_path)
         .map_err(|e| CoreError::Io(std::io::Error::other(format!("{e:?}"))))?;
-    let repo = Repo::new(Some(client_id.to_string()), Box::new(store));
+    let repo = Repo::new(Some(client_id.to_owned()), Box::new(store));
     let repo_handle = repo.run();
 
     let local_id_path = local_data_dir.join("local_doc_id");
@@ -196,7 +196,7 @@ impl Exporter {
     pub fn new(sync_root: &Path, client_id: &str) -> Self {
         Self {
             sync_root: sync_root.to_path_buf(),
-            client_id: client_id.to_string(),
+            client_id: client_id.to_owned(),
         }
     }
 
@@ -287,7 +287,7 @@ mod tests {
             tx.commit();
         });
 
-        let local_save = doc_handle.with_doc(|doc| doc.save());
+        let local_save = doc_handle.with_doc(automerge::Automerge::save);
         let peer_store = sync_root.join("peer-a").join("store");
         std::fs::create_dir_all(&peer_store).unwrap();
         std::fs::write(peer_store.join("document.snapshot"), &local_save).unwrap();

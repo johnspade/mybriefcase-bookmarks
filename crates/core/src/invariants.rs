@@ -7,7 +7,7 @@ pub fn assert_valid_tree(store: &BookmarkStore) {
 
 fn assert_no_cycles(store: &BookmarkStore, folder_id: &str, path: &mut HashSet<String>) {
     assert!(
-        path.insert(folder_id.to_string()),
+        path.insert(folder_id.to_owned()),
         "cycle detected: folder {folder_id} is an ancestor of itself"
     );
     if let Some(folder) = store.folders.get(folder_id) {
@@ -49,7 +49,7 @@ pub fn assert_cascade_complete(store: &BookmarkStore, deleted_folder_id: &str) {
         .expect("folder should exist");
     assert!(folder.deleted, "target folder not marked deleted");
 
-    let mut stack = vec![deleted_folder_id.to_string()];
+    let mut stack = vec![deleted_folder_id.to_owned()];
     let mut visited = HashSet::new();
     while let Some(fid) = stack.pop() {
         if !visited.insert(fid.clone()) {

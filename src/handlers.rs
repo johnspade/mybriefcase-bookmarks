@@ -258,7 +258,7 @@ fn collect_folder_paths(
         format!("{parent_path} / {}", folder.title)
     };
     let is_current = folder_id == current_parent_id;
-    out.push((folder_id.to_string(), path.clone(), is_current));
+    out.push((folder_id.to_owned(), path.clone(), is_current));
 
     let child_folder_ids: Vec<&String> = folder
         .children
@@ -278,7 +278,7 @@ fn render_folder_response(
 ) -> Result<Html<String>, StatusCode> {
     let store = read_store(&state.doc_handle)?;
     let effective_id = if store.folders.contains_key(folder_id) {
-        folder_id.to_string()
+        folder_id.to_owned()
     } else {
         store.root_folder_id.clone()
     };
@@ -289,8 +289,7 @@ fn render_folder_response(
     let folder_title = store
         .folders
         .get(&effective_id)
-        .map_or("Bookmarks", |f| f.title.as_str())
-        .to_string();
+        .map_or("Bookmarks", |f| f.title.as_str()).to_owned();
     let total_items = folders.len() + bookmarks.len();
 
     let content = render(&FolderContentTemplate {
@@ -327,7 +326,7 @@ fn format_timestamp(ts: i64) -> String {
         ts
     };
     chrono::DateTime::from_timestamp(secs, 0).map_or_else(
-        || "unknown".to_string(),
+        || "unknown".to_owned(),
         |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
     )
 }
@@ -359,7 +358,7 @@ pub async fn index_page(
         sidebar_html,
         content_html,
         current_folder_id: root_id,
-        page_title: "MyBriefcase Bookmarks".to_string(),
+        page_title: "MyBriefcase Bookmarks".to_owned(),
         static_v: state.static_version.clone(),
     };
 
@@ -388,7 +387,7 @@ pub async fn settings_page(State(state): State<Arc<AppState>>) -> Result<Html<St
 
     let page = SettingsBaseTemplate {
         content_html,
-        page_title: "Settings — MyBriefcase Bookmarks".to_string(),
+        page_title: "Settings — MyBriefcase Bookmarks".to_owned(),
         static_v: state.static_version.clone(),
     };
 
@@ -404,7 +403,7 @@ pub async fn index_page_for_folder(
 ) -> Result<Html<String>, StatusCode> {
     let store = read_store(&state.doc_handle)?;
     let effective_id = if store.folders.contains_key(folder_id) {
-        folder_id.to_string()
+        folder_id.to_owned()
     } else {
         store.root_folder_id.clone()
     };
@@ -506,8 +505,7 @@ pub async fn bookmark_edit_form(
     };
 
     let current_folder_id = find_folder_for_bookmark(&store, &id)
-        .unwrap_or(&store.root_folder_id)
-        .to_string();
+        .unwrap_or(&store.root_folder_id).to_owned();
     let mut folders = Vec::new();
     let exclude = std::collections::HashSet::new();
     collect_folder_paths(
@@ -634,8 +632,7 @@ pub async fn update_bookmark_html(
                     autosurgeon::hydrate(d).map_err(|e| CoreError::DocumentCorrupted(e.to_string()))
                 })?;
                 let current_folder_id = find_folder_for_bookmark(&store, &id)
-                    .unwrap_or(&store.root_folder_id)
-                    .to_string();
+                    .unwrap_or(&store.root_folder_id).to_owned();
                 if *new_folder_id != current_folder_id {
                     ops::move_item(doc, &id, &current_folder_id, new_folder_id)?;
                 }
@@ -650,16 +647,14 @@ pub async fn update_bookmark_html(
     };
 
     let folder_id = find_folder_for_bookmark(&store, &id)
-        .unwrap_or(&store.root_folder_id)
-        .to_string();
+        .unwrap_or(&store.root_folder_id).to_owned();
     let sidebar_html = build_sidebar_html(&store, &folder_id);
     let (folders, bookmarks) = build_folder_items(&store, &folder_id, SortOrder::default());
     let breadcrumbs = build_breadcrumbs(&store, &folder_id);
     let folder_title = store
         .folders
         .get(&folder_id)
-        .map_or("Bookmarks", |f| f.title.as_str())
-        .to_string();
+        .map_or("Bookmarks", |f| f.title.as_str()).to_owned();
     let total_items = folders.len() + bookmarks.len();
 
     let detail = render(&DetailBookmarkTemplate {
@@ -1014,7 +1009,7 @@ pub async fn bookmark_history_html(
                 .map(|f| f.field.as_str())
                 .collect();
             let fields_str = if fields.is_empty() {
-                "created".to_string()
+                "created".to_owned()
             } else {
                 fields.join(", ")
             };
@@ -1072,16 +1067,14 @@ pub async fn revert_bookmark_html(
     };
 
     let folder_id = find_folder_for_bookmark(&store, &id)
-        .unwrap_or(&store.root_folder_id)
-        .to_string();
+        .unwrap_or(&store.root_folder_id).to_owned();
     let sidebar_html = build_sidebar_html(&store, &folder_id);
     let (folders, bookmarks) = build_folder_items(&store, &folder_id, SortOrder::default());
     let breadcrumbs = build_breadcrumbs(&store, &folder_id);
     let folder_title = store
         .folders
         .get(&folder_id)
-        .map_or("Bookmarks", |f| f.title.as_str())
-        .to_string();
+        .map_or("Bookmarks", |f| f.title.as_str()).to_owned();
     let total_items = folders.len() + bookmarks.len();
 
     let detail = render(&DetailBookmarkTemplate {
@@ -1206,10 +1199,10 @@ pub async fn serve_favicon(
     };
     Ok((
         [
-            (axum::http::header::CONTENT_TYPE, content_type.to_string()),
+            (axum::http::header::CONTENT_TYPE, content_type.to_owned()),
             (
                 axum::http::header::CACHE_CONTROL,
-                "public, max-age=31536000, immutable".to_string(),
+                "public, max-age=31536000, immutable".to_owned(),
             ),
         ],
         data,
@@ -1282,12 +1275,12 @@ mod tests {
         let mut folder_map = HashMap::new();
         for (id, title, children) in folders {
             folder_map.insert(
-                id.to_string(),
+                id.to_owned(),
                 crate::model::Folder {
-                    title: title.to_string(),
+                    title: title.to_owned(),
                     children: children.into_iter().map(String::from).collect(),
-                    created_at: "2026-01-01T00:00:00Z".to_string(),
-                    updated_at: "2026-01-01T00:00:00Z".to_string(),
+                    created_at: "2026-01-01T00:00:00Z".to_owned(),
+                    updated_at: "2026-01-01T00:00:00Z".to_owned(),
                     deleted: false,
                 },
             );
@@ -1295,25 +1288,25 @@ mod tests {
         let mut bookmark_map = HashMap::new();
         for (id, title, url, created) in bookmarks {
             bookmark_map.insert(
-                id.to_string(),
+                id.to_owned(),
                 crate::model::Bookmark {
-                    url: url.to_string(),
-                    title: title.to_string(),
+                    url: url.to_owned(),
+                    title: title.to_owned(),
                     notes: String::new(),
                     favicon: String::new(),
-                    created_at: created.to_string(),
-                    updated_at: created.to_string(),
+                    created_at: created.to_owned(),
+                    updated_at: created.to_owned(),
                     deleted: false,
                 },
             );
         }
         BookmarkStore {
-            root_folder_id: root_id.to_string(),
+            root_folder_id: root_id.to_owned(),
             folders: folder_map,
             bookmarks: bookmark_map,
             meta: crate::model::StoreMeta {
                 schema_version: 1,
-                collection_name: "bookmarks".to_string(),
+                collection_name: "bookmarks".to_owned(),
             },
         }
     }
@@ -1342,7 +1335,7 @@ mod tests {
             vec![],
         );
         let result = find_parent_folder_id(&store, "child");
-        assert_eq!(result, Some("parent".to_string()));
+        assert_eq!(result, Some("parent".to_owned()));
     }
 
     #[test]

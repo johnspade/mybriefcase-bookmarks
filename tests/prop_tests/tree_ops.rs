@@ -203,7 +203,7 @@ fn collect_descendants(
     folder_id: &str,
 ) -> std::collections::HashSet<String> {
     let mut result = std::collections::HashSet::new();
-    let mut stack = vec![folder_id.to_string()];
+    let mut stack = vec![folder_id.to_owned()];
     while let Some(fid) = stack.pop() {
         if let Some(f) = store.folders.get(&fid) {
             for child_id in &f.children {

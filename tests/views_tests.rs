@@ -24,9 +24,9 @@ fn build_views_app() -> (Router, String) {
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
-        client_id: "test-views".to_string(),
+        client_id: "test-views".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(sync_root.path(), "test-views"),
     });
     let app = Router::new()
@@ -63,9 +63,9 @@ fn build_views_app_with_handle() -> (Router, String, automerge_repo::DocHandle) 
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
-        client_id: "test-views".to_string(),
+        client_id: "test-views".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(sync_root.path(), "test-views"),
     });
     let app = Router::new()
@@ -116,7 +116,7 @@ async fn post_form(app: Router, uri: &str, form_body: &str) -> (StatusCode, Stri
         .oneshot(
             Request::post(uri)
                 .header("content-type", "application/x-www-form-urlencoded")
-                .body(Body::from(form_body.to_string()))
+                .body(Body::from(form_body.to_owned()))
                 .unwrap(),
         )
         .await
@@ -825,7 +825,7 @@ async fn fetch_favicon_endpoint_returns_partial_with_img() {
                     icon_clone.len()
                 )
             } else {
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 50\r\n\r\n<html><head><link rel=\"icon\" href=\"/favicon.ico\"></head></html>".to_string()
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 50\r\n\r\n<html><head><link rel=\"icon\" href=\"/favicon.ico\"></head></html>".to_owned()
             };
             let _ = stream.write_all(response.as_bytes());
             if req.contains("GET /favicon.ico") {
@@ -1479,9 +1479,9 @@ fn build_views_app_with_sync_root() -> (
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root_path.clone(),
-        client_id: "test-views".to_string(),
+        client_id: "test-views".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(&sync_root_path, "test-views"),
     });
     let app = Router::new()
@@ -1825,9 +1825,9 @@ async fn serve_favicon_content_type_png() {
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
-        client_id: "test-favicon-ct".to_string(),
+        client_id: "test-favicon-ct".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(sync_root.path(), "test-favicon-ct"),
     });
     let app = Router::new()
@@ -1861,9 +1861,9 @@ async fn serve_favicon_content_type_ico() {
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
-        client_id: "test-favicon-ico".to_string(),
+        client_id: "test-favicon-ico".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(sync_root.path(), "test-favicon-ico"),
     });
     let app = Router::new()
@@ -1897,9 +1897,9 @@ async fn serve_favicon_content_type_svg() {
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
-        client_id: "test-favicon-svg".to_string(),
+        client_id: "test-favicon-svg".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(sync_root.path(), "test-favicon-svg"),
     });
     let app = Router::new()
@@ -1933,9 +1933,9 @@ async fn serve_favicon_content_type_jpg() {
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
-        client_id: "test-favicon-jpg".to_string(),
+        client_id: "test-favicon-jpg".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(sync_root.path(), "test-favicon-jpg"),
     });
     let app = Router::new()
@@ -1969,9 +1969,9 @@ async fn serve_favicon_content_type_gif() {
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
-        client_id: "test-favicon-gif".to_string(),
+        client_id: "test-favicon-gif".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(sync_root.path(), "test-favicon-gif"),
     });
     let app = Router::new()
@@ -2005,9 +2005,9 @@ async fn serve_favicon_content_type_webp() {
     let state = Arc::new(state::AppState {
         doc_handle: td.doc_handle,
         sync_root: sync_root.path().to_path_buf(),
-        client_id: "test-favicon-webp".to_string(),
+        client_id: "test-favicon-webp".to_owned(),
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter: repo::Exporter::new(sync_root.path(), "test-favicon-webp"),
     });
     let app = Router::new()

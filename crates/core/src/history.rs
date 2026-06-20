@@ -93,9 +93,9 @@ fn compute_field_changes(
     ] {
         if old_val.is_none_or(|o| o != new_val) {
             changes.push(FieldChange {
-                field: <&str>::from(field).to_string(),
+                field: <&str>::from(field).to_owned(),
                 old_value: old_val.map(String::from),
-                new_value: Some(new_val.to_string()),
+                new_value: Some(new_val.to_owned()),
             });
         }
     }
@@ -361,11 +361,11 @@ mod tests {
     #[test]
     fn test_compute_field_changes_no_changes() {
         let snapshot = BookmarkSnapshot {
-            url: "https://x.com".to_string(),
-            title: "X".to_string(),
-            notes: "n".to_string(),
-            created_at: "2026-01-01".to_string(),
-            updated_at: "2026-01-01".to_string(),
+            url: "https://x.com".to_owned(),
+            title: "X".to_owned(),
+            notes: "n".to_owned(),
+            created_at: "2026-01-01".to_owned(),
+            updated_at: "2026-01-01".to_owned(),
         };
         let changes = compute_field_changes(Some(&snapshot), &snapshot);
         assert!(changes.is_empty());
@@ -374,18 +374,18 @@ mod tests {
     #[test]
     fn test_compute_field_changes_all_fields() {
         let before = BookmarkSnapshot {
-            url: "https://old.com".to_string(),
-            title: "Old".to_string(),
-            notes: "old notes".to_string(),
-            created_at: "2026-01-01".to_string(),
-            updated_at: "2026-01-01".to_string(),
+            url: "https://old.com".to_owned(),
+            title: "Old".to_owned(),
+            notes: "old notes".to_owned(),
+            created_at: "2026-01-01".to_owned(),
+            updated_at: "2026-01-01".to_owned(),
         };
         let after = BookmarkSnapshot {
-            url: "https://new.com".to_string(),
-            title: "New".to_string(),
-            notes: "new notes".to_string(),
-            created_at: "2026-01-01".to_string(),
-            updated_at: "2026-01-02".to_string(),
+            url: "https://new.com".to_owned(),
+            title: "New".to_owned(),
+            notes: "new notes".to_owned(),
+            created_at: "2026-01-01".to_owned(),
+            updated_at: "2026-01-02".to_owned(),
         };
         let changes = compute_field_changes(Some(&before), &after);
         assert_eq!(changes.len(), 3);
@@ -397,11 +397,11 @@ mod tests {
     #[test]
     fn test_compute_field_changes_none_before() {
         let after = BookmarkSnapshot {
-            url: "https://x.com".to_string(),
-            title: "X".to_string(),
+            url: "https://x.com".to_owned(),
+            title: "X".to_owned(),
             notes: String::new(),
-            created_at: "2026-01-01".to_string(),
-            updated_at: "2026-01-01".to_string(),
+            created_at: "2026-01-01".to_owned(),
+            updated_at: "2026-01-01".to_owned(),
         };
         let changes = compute_field_changes(None, &after);
         assert_eq!(changes.len(), 3);

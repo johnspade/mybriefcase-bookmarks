@@ -74,7 +74,7 @@ fn make_app() -> (axum::Router, String) {
     let app = build_app(
         td.doc_handle,
         sync_root.path().to_path_buf(),
-        "test-client".to_string(),
+        "test-client".to_owned(),
     );
     // Leak the TempDirs so they live for the test duration
     std::mem::forget(td.temp_dir);
@@ -157,7 +157,7 @@ async fn update_bookmark() {
         }),
     )
     .await;
-    let bm_id = resp["id"].as_str().unwrap().to_string();
+    let bm_id = resp["id"].as_str().unwrap().to_owned();
 
     let status = put_json(
         app.clone(),
@@ -196,7 +196,7 @@ async fn delete_bookmark_204() {
         }),
     )
     .await;
-    let bm_id = resp["id"].as_str().unwrap().to_string();
+    let bm_id = resp["id"].as_str().unwrap().to_owned();
 
     let status = delete_request(app.clone(), &format!("/bookmarks/{bm_id}")).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
@@ -238,7 +238,7 @@ async fn move_item_between_folders() {
         }),
     )
     .await;
-    let target_id = folder_resp["id"].as_str().unwrap().to_string();
+    let target_id = folder_resp["id"].as_str().unwrap().to_owned();
 
     let (_, bm_resp) = post_json(
         app.clone(),
@@ -249,7 +249,7 @@ async fn move_item_between_folders() {
         }),
     )
     .await;
-    let bm_id = bm_resp["id"].as_str().unwrap().to_string();
+    let bm_id = bm_resp["id"].as_str().unwrap().to_owned();
 
     let (status, _) = post_json(
         app.clone(),
@@ -327,7 +327,7 @@ async fn history_returns_entries_for_bookmark() {
         }),
     )
     .await;
-    let bm_id = resp["id"].as_str().unwrap().to_string();
+    let bm_id = resp["id"].as_str().unwrap().to_owned();
 
     put_json(
         app.clone(),
@@ -357,7 +357,7 @@ async fn history_at_hash_returns_snapshot() {
         }),
     )
     .await;
-    let bm_id = resp["id"].as_str().unwrap().to_string();
+    let bm_id = resp["id"].as_str().unwrap().to_owned();
 
     put_json(
         app.clone(),
@@ -390,7 +390,7 @@ async fn revert_restores_bookmark_state() {
         }),
     )
     .await;
-    let bm_id = resp["id"].as_str().unwrap().to_string();
+    let bm_id = resp["id"].as_str().unwrap().to_owned();
 
     put_json(
         app.clone(),
@@ -402,8 +402,7 @@ async fn revert_restores_bookmark_state() {
     let (_, history) = get_json(app.clone(), &format!("/bookmarks/{bm_id}/history")).await;
     let v1_hash = history.as_array().unwrap().last().unwrap()["hash"]
         .as_str()
-        .unwrap()
-        .to_string();
+        .unwrap().to_owned();
 
     let status = post_json(
         app.clone(),
@@ -454,7 +453,7 @@ async fn revert_invalid_hash_400() {
         }),
     )
     .await;
-    let bm_id = resp["id"].as_str().unwrap().to_string();
+    let bm_id = resp["id"].as_str().unwrap().to_owned();
 
     let status = post_json(
         app,
@@ -510,7 +509,7 @@ async fn api_validation_error_returns_problem_json() {
         }),
     )
     .await;
-    let folder_id = resp["id"].as_str().unwrap().to_string();
+    let folder_id = resp["id"].as_str().unwrap().to_owned();
 
     let resp = app
         .oneshot(

@@ -111,8 +111,7 @@ where
                 let url = el
                     .attr("HREF")
                     .or_else(|| el.attr("href"))
-                    .unwrap_or("")
-                    .to_string();
+                    .unwrap_or("").to_owned();
                 let title = collect_text(doc, child.id());
                 let created_at = el
                     .attr("ADD_DATE")
@@ -208,7 +207,7 @@ fn collect_text(doc: &Html, node_id: ego_tree::NodeId) -> String {
             text.push_str(t);
         }
     }
-    text.trim().to_string()
+    text.trim().to_owned()
 }
 
 #[cfg(test)]

@@ -77,8 +77,7 @@ pub async fn discover_favicon_url(page_url: &str) -> anyhow::Result<String> {
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
+        .unwrap_or("").to_owned();
 
     if !content_type.contains("text/html") {
         let origin = origin_url(&final_url)?;
@@ -170,8 +169,7 @@ async fn attempt_fetch(client: &reqwest::Client, url: &str) -> anyhow::Result<(V
         .split(';')
         .next()
         .unwrap_or("image/png")
-        .trim()
-        .to_string();
+        .trim().to_owned();
     let bytes = resp.bytes().await?.to_vec();
     anyhow::ensure!(is_valid_image(&bytes), "response is not a valid image");
     Ok((bytes, content_type))

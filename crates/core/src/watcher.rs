@@ -15,7 +15,7 @@ pub fn start_file_watcher(
     let sync_root = sync_root
         .canonicalize()
         .unwrap_or_else(|_| sync_root.to_path_buf());
-    let own_id = own_client_id.to_string();
+    let own_id = own_client_id.to_owned();
 
     std::thread::spawn(move || {
         let (ntx, nrx) = std::sync::mpsc::channel();
@@ -457,10 +457,10 @@ mod tests {
         });
 
         let store = make_peer_store(root, "peer-a");
-        let data = doc_handle.with_doc(|doc| doc.save());
+        let data = doc_handle.with_doc(automerge::Automerge::save);
         std::fs::write(store.join("document.snapshot"), &data).unwrap();
 
-        let changed = merge_specific_peers(&doc_handle, root, &["peer-a".to_string()]);
+        let changed = merge_specific_peers(&doc_handle, root, &["peer-a".to_owned()]);
         assert!(!changed, "merge of already-known data should return false");
     }
 
@@ -480,7 +480,7 @@ mod tests {
         let store = make_peer_store(root, "peer-a");
         std::fs::write(store.join("document.snapshot"), peer_doc.save()).unwrap();
 
-        let changed = merge_specific_peers(&doc_handle, root, &["peer-a".to_string()]);
+        let changed = merge_specific_peers(&doc_handle, root, &["peer-a".to_owned()]);
         assert!(changed, "merge of new peer data should return true");
     }
 
@@ -500,10 +500,10 @@ mod tests {
         let store = make_peer_store(root, "peer-a");
         std::fs::write(store.join("document.snapshot"), peer_doc.save()).unwrap();
 
-        let first = merge_specific_peers(&doc_handle, root, &["peer-a".to_string()]);
+        let first = merge_specific_peers(&doc_handle, root, &["peer-a".to_owned()]);
         assert!(first);
 
-        let second = merge_specific_peers(&doc_handle, root, &["peer-a".to_string()]);
+        let second = merge_specific_peers(&doc_handle, root, &["peer-a".to_owned()]);
         assert!(!second, "second merge of same data should return false");
     }
 }

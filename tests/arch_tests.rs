@@ -87,7 +87,7 @@ fn extract_module_from_use(line: &str) -> Option<String> {
     if module.is_empty() {
         return None;
     }
-    Some(module.to_string())
+    Some(module.to_owned())
 }
 
 fn extract_inline_crate_refs(line: &str) -> Vec<String> {
@@ -99,7 +99,7 @@ fn extract_inline_crate_refs(line: &str) -> Vec<String> {
         if let Some(module) = after.split([':', ' ', ')', ',']).next() {
             let module = module.trim();
             if !module.is_empty() {
-                modules.push(module.to_string());
+                modules.push(module.to_owned());
             }
         }
         search_from = abs_pos + 7;

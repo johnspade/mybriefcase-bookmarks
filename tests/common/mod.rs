@@ -17,7 +17,7 @@ pub struct TestDoc {
 pub fn new_initialized_doc(client_id: &str) -> TestDoc {
     let temp_dir = TempDir::new().unwrap();
     let store = FsStorage::open(temp_dir.path()).unwrap();
-    let repo = Repo::new(Some(client_id.to_string()), Box::new(store));
+    let repo = Repo::new(Some(client_id.to_owned()), Box::new(store));
     let repo_handle = repo.run();
     let doc_handle = repo_handle.new_document();
 
@@ -60,7 +60,7 @@ pub fn new_initialized_doc(client_id: &str) -> TestDoc {
 pub fn fork_doc(source: &TestDoc, new_client_id: &str) -> TestDoc {
     let temp_dir = TempDir::new().unwrap();
     let store = FsStorage::open(temp_dir.path()).unwrap();
-    let repo = Repo::new(Some(new_client_id.to_string()), Box::new(store));
+    let repo = Repo::new(Some(new_client_id.to_owned()), Box::new(store));
     let repo_handle = repo.run();
     let doc_handle = repo_handle.new_document();
 
@@ -97,7 +97,7 @@ pub fn build_app(
         sync_root,
         client_id,
         sse_tx,
-        static_version: "test".to_string(),
+        static_version: "test".to_owned(),
         exporter,
     });
 

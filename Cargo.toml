@@ -8,9 +8,14 @@ unused_must_use = "deny"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }
-cargo = { level = "warn", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+# Type-safety restriction lints
+fn_params_excessive_bools = "deny"
+str_to_string = "deny"
+rest_pat_in_fully_bound_structs = "deny"
+# Noisy / inapplicable
 unused_async = "allow"
 module_name_repetitions = "allow"
 multiple_crate_versions = "allow"
