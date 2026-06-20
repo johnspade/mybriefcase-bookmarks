@@ -18,6 +18,7 @@ struct StaticAssets;
 struct Config {
     sync_root: PathBuf,
     local_data_dir: PathBuf,
+    host: String,
     port: u16,
     dev_mode: bool,
     client_id: Option<String>,
@@ -32,6 +33,7 @@ impl Config {
             local_data_dir: PathBuf::from(
                 std::env::var("MBB_LOCAL_DIR").unwrap_or_else(|_| "./local_data".to_owned()),
             ),
+            host: std::env::var("MBB_HOST").unwrap_or_else(|_| "127.0.0.1".to_owned()),
             port: std::env::var("MBB_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
@@ -228,7 +230,7 @@ async fn main() {
     spawn_poller(&state);
     let app = build_router(state);
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", cfg.port))
+    let listener = tokio::net::TcpListener::bind(format!("{}:{}", cfg.host, cfg.port))
         .await
         .unwrap();
     let actual_port = listener.local_addr().unwrap().port();
