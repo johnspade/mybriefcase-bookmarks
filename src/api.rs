@@ -63,8 +63,8 @@ impl IntoResponse for ApiError {
         };
 
         let body = ProblemDetails {
-            r#type: type_uri.to_string(),
-            title: title.to_string(),
+            r#type: type_uri.to_owned(),
+            title: title.to_owned(),
             status: status.as_u16(),
             detail: self.0.to_string(),
         };

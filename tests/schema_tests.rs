@@ -33,19 +33,19 @@ fn schema_constants_match_model_fields_bidirectionally() {
     // Derive field sets from exhaustive enums — adding a variant without
     // a matching model field (or vice versa) will fail this test.
     let root_constants: BTreeSet<String> = BookmarkStoreField::iter()
-        .map(|v| <&str>::from(v).to_string())
+        .map(|v| <&str>::from(v).to_owned())
         .collect();
 
     let bookmark_constants: BTreeSet<String> = BookmarkField::iter()
-        .map(|v| <&str>::from(v).to_string())
+        .map(|v| <&str>::from(v).to_owned())
         .collect();
 
     let folder_constants: BTreeSet<String> = FolderField::iter()
-        .map(|v| <&str>::from(v).to_string())
+        .map(|v| <&str>::from(v).to_owned())
         .collect();
 
     let store_meta_constants: BTreeSet<String> = StoreMetaField::iter()
-        .map(|v| <&str>::from(v).to_string())
+        .map(|v| <&str>::from(v).to_owned())
         .collect();
 
     // Bidirectional checks

@@ -10,7 +10,7 @@ pub fn hostname_client_id() -> String {
             let s = h.to_string_lossy().to_string();
             if s.is_empty() { None } else { Some(s) }
         })
-        .unwrap_or_else(|| "unknown".to_string())
+        .unwrap_or_else(|| "unknown".to_owned())
 }
 
 /// Hostname + random 8-char suffix, for dev mode without explicit ID.
@@ -45,7 +45,7 @@ mod tests {
         let id = hostname_client_id();
         assert!(!id.is_empty());
         let expected = hostname::get().map_or_else(
-            |_| "unknown".to_string(),
+            |_| "unknown".to_owned(),
             |h| h.to_string_lossy().to_string(),
         );
         assert_eq!(id, expected);

@@ -239,7 +239,7 @@ async fn poll_bidirectional_sync() {
 
     // Node B polls and merges A's change.
     let changed_b = poll_b.poll_changed_peers(sync_root.path(), "node-b");
-    assert!(changed_b.contains(&"node-a".to_string()));
+    assert!(changed_b.contains(&"node-a".to_owned()));
     watcher::merge_specific_peers(&node_b.doc_handle, sync_root.path(), &changed_b);
 
     let store_b = hydrate_store(&node_b.doc_handle);
@@ -258,7 +258,7 @@ async fn poll_bidirectional_sync() {
 
     // Node A polls and merges B's change.
     let changed_a = poll_a.poll_changed_peers(sync_root.path(), "node-a");
-    assert!(changed_a.contains(&"node-b".to_string()));
+    assert!(changed_a.contains(&"node-b".to_owned()));
     watcher::merge_specific_peers(&node_a.doc_handle, sync_root.path(), &changed_a);
 
     let store_a = hydrate_store(&node_a.doc_handle);

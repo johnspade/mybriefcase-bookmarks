@@ -37,7 +37,7 @@ fn with_doc_mut_checked<R>(
 /// for the given folder.
 fn with_doc_mut_checked_cascade(
     doc_handle: &DocHandle,
-    _folder_id: &str,
+    #[cfg_attr(not(test), allow(unused_variables))] folder_id: &str,
     f: impl FnOnce(&mut automerge::Automerge) -> Result<(), CoreError>,
 ) -> Result<(), CoreError> {
     doc_handle.with_doc_mut(f)?;
@@ -47,7 +47,7 @@ fn with_doc_mut_checked_cascade(
             doc_handle.with_doc(|doc| autosurgeon::hydrate(doc).unwrap());
         crate::invariants::assert_valid_tree(&store);
         crate::invariants::assert_structural_integrity(&store);
-        crate::invariants::assert_cascade_complete(&store, _folder_id);
+        crate::invariants::assert_cascade_complete(&store, folder_id);
     }
     Ok(())
 }
@@ -245,7 +245,7 @@ fn mark_descendants_deleted(
     root_folder_id: &str,
     now: &str,
 ) -> Result<(), CoreError> {
-    let mut stack = vec![root_folder_id.to_string()];
+    let mut stack = vec![root_folder_id.to_owned()];
     let mut visited = std::collections::HashSet::new();
 
     while let Some(fid) = stack.pop() {
@@ -267,7 +267,7 @@ fn mark_descendants_deleted(
         for i in 0..len {
             if let Ok(Some((automerge::Value::Scalar(s), _))) = tx.get(&children, i) {
                 let child_id = match s.to_str() {
-                    Some(id) => id.to_string(),
+                    Some(id) => id.to_owned(),
                     None => continue,
                 };
                 if tx.get(folders, child_id.as_str())?.is_some() {
@@ -424,7 +424,7 @@ fn is_descendant_in_tx(
     ancestor_id: &str,
     target_id: &str,
 ) -> bool {
-    let mut stack = vec![ancestor_id.to_string()];
+    let mut stack = vec![ancestor_id.to_owned()];
     let mut visited = std::collections::HashSet::new();
 
     while let Some(fid) = stack.pop() {
@@ -445,7 +445,7 @@ fn is_descendant_in_tx(
                         return true;
                     }
                     if tx.get(folders, child_id).ok().flatten().is_some() {
-                        stack.push(child_id.to_string());
+                        stack.push(child_id.to_owned());
                     }
                 }
             }
@@ -838,7 +838,7 @@ mod tests {
 
         let store = read_store(&doc);
         let bm = store.bookmarks.get(&id).unwrap();
-        assert_eq!(bm.favicon, Some("abc123.png".to_string()));
+        assert_eq!(bm.favicon, Some("abc123.png".to_owned()));
         assert_ne!(bm.updated_at, original_updated);
     }
 
@@ -917,8 +917,8 @@ mod tests {
     async fn test_import_into_nonexistent_folder_errors() {
         let (doc, _tmp) = setup_repo();
         let items = vec![crate::import::ImportedItem::Bookmark {
-            url: "https://x.com".to_string(),
-            title: "X".to_string(),
+            url: "https://x.com".to_owned(),
+            title: "X".to_owned(),
             notes: String::new(),
             created_at: None,
             updated_at: None,

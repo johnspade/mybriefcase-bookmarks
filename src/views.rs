@@ -75,7 +75,7 @@ pub fn domain_color(url: &str) -> String {
     for b in url.bytes() {
         hash = u32::from(b).wrapping_add(hash.wrapping_shl(5).wrapping_sub(hash));
     }
-    colors[(hash as usize) % colors.len()].to_string()
+    colors[(hash as usize) % colors.len()].to_owned()
 }
 
 #[must_use]
@@ -114,7 +114,7 @@ pub fn count_bookmarks_recursive(store: &BookmarkStore, folder: &Folder) -> usiz
 #[must_use]
 pub fn build_breadcrumbs(store: &BookmarkStore, folder_id: &str) -> Vec<BreadcrumbItem> {
     let mut path = Vec::new();
-    let mut current = folder_id.to_string();
+    let mut current = folder_id.to_owned();
     while let Some(folder) = store.folders.get(&current) {
         path.push((current.clone(), folder.title.clone()));
         if current == store.root_folder_id {
@@ -334,12 +334,12 @@ mod tests {
         let mut folder_map = HashMap::new();
         for (id, title, children) in folders {
             folder_map.insert(
-                id.to_string(),
+                id.to_owned(),
                 crate::model::Folder {
-                    title: title.to_string(),
+                    title: title.to_owned(),
                     children: children.into_iter().map(String::from).collect(),
-                    created_at: "2026-01-01T00:00:00Z".to_string(),
-                    updated_at: "2026-01-01T00:00:00Z".to_string(),
+                    created_at: "2026-01-01T00:00:00Z".to_owned(),
+                    updated_at: "2026-01-01T00:00:00Z".to_owned(),
                     deleted: false,
                 },
             );
@@ -347,25 +347,25 @@ mod tests {
         let mut bookmark_map = HashMap::new();
         for (id, title, url, created) in bookmarks {
             bookmark_map.insert(
-                id.to_string(),
+                id.to_owned(),
                 crate::model::Bookmark {
-                    url: url.to_string(),
-                    title: title.to_string(),
+                    url: url.to_owned(),
+                    title: title.to_owned(),
                     notes: String::new(),
                     favicon: None,
-                    created_at: created.to_string(),
-                    updated_at: created.to_string(),
+                    created_at: created.to_owned(),
+                    updated_at: created.to_owned(),
                     deleted: false,
                 },
             );
         }
         BookmarkStore {
-            root_folder_id: root_id.to_string(),
+            root_folder_id: root_id.to_owned(),
             folders: folder_map,
             bookmarks: bookmark_map,
             meta: crate::model::StoreMeta {
                 schema_version: 1,
-                collection_name: "bookmarks".to_string(),
+                collection_name: "bookmarks".to_owned(),
             },
         }
     }
@@ -614,7 +614,7 @@ mod tests {
         store.folders.get_mut("parent").unwrap().deleted = true;
         // Root also has "child" in its children, so root should be found
         let result = find_parent_folder_id(&store, "child");
-        assert_eq!(result, Some("root".to_string()));
+        assert_eq!(result, Some("root".to_owned()));
     }
 
     #[test]

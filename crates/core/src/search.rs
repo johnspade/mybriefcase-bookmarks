@@ -110,38 +110,38 @@ mod tests {
     fn make_store(bookmarks: Vec<(&str, Bookmark)>) -> BookmarkStore {
         let mut bm_map = HashMap::new();
         for (id, bm) in bookmarks {
-            bm_map.insert(id.to_string(), bm);
+            bm_map.insert(id.to_owned(), bm);
         }
         let mut folders = HashMap::new();
         folders.insert(
-            "root".to_string(),
+            "root".to_owned(),
             Folder {
-                title: "Root".to_string(),
+                title: "Root".to_owned(),
                 children: bm_map.keys().cloned().collect(),
-                created_at: "2024-01-01T00:00:00Z".to_string(),
-                updated_at: "2024-01-01T00:00:00Z".to_string(),
+                created_at: "2024-01-01T00:00:00Z".to_owned(),
+                updated_at: "2024-01-01T00:00:00Z".to_owned(),
                 deleted: false,
             },
         );
         BookmarkStore {
-            root_folder_id: "root".to_string(),
+            root_folder_id: "root".to_owned(),
             folders,
             bookmarks: bm_map,
             meta: StoreMeta {
                 schema_version: 1,
-                collection_name: "bookmarks".to_string(),
+                collection_name: "bookmarks".to_owned(),
             },
         }
     }
 
     fn bookmark(title: &str, url: &str, notes: &str) -> Bookmark {
         Bookmark {
-            title: title.to_string(),
-            url: url.to_string(),
-            notes: notes.to_string(),
+            title: title.to_owned(),
+            url: url.to_owned(),
+            notes: notes.to_owned(),
             favicon: None,
-            created_at: "2024-01-01T00:00:00Z".to_string(),
-            updated_at: "2024-01-01T00:00:00Z".to_string(),
+            created_at: "2024-01-01T00:00:00Z".to_owned(),
+            updated_at: "2024-01-01T00:00:00Z".to_owned(),
             deleted: false,
         }
     }
