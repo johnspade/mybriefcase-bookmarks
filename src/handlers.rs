@@ -555,7 +555,7 @@ pub async fn create_bookmark_html(
         .mutate(|doc| ops::add_bookmark(doc, &form.folder_id, &form.url, &form.title))
         .map_err(|e| core_error_to_status(&e))?;
 
-    if !form.favicon_url.is_empty() && !form.favicon_url.starts_with("data:") {
+    if should_fetch_favicon(&form.favicon_url) {
         let sync_root = state.sync_root.clone();
         let doc_handle = state.doc_handle.clone();
         let sse_tx = state.sse_tx.clone();
@@ -1223,9 +1223,28 @@ pub async fn serve_favicon(
         .into_response())
 }
 
+fn should_fetch_favicon(favicon_url: &str) -> bool {
+    !favicon_url.is_empty() && !favicon_url.starts_with("data:")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn should_fetch_favicon_valid_url() {
+        assert!(should_fetch_favicon("https://example.com/icon.png"));
+    }
+
+    #[test]
+    fn should_fetch_favicon_empty() {
+        assert!(!should_fetch_favicon(""));
+    }
+
+    #[test]
+    fn should_fetch_favicon_data_url() {
+        assert!(!should_fetch_favicon("data:image/png;base64,iVBOR"));
+    }
 
     #[test]
     fn format_timestamp_millis() {

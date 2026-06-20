@@ -2194,6 +2194,70 @@ async fn create_bookmark_favicon_propagates_to_existing_same_url() {
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
+async fn create_bookmark_favicon_propagates_skips_deleted_and_different_url() {
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let icon_bytes: Vec<u8> = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
+
+    let icon_clone = icon_bytes.clone();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        loop {
+            let Ok((mut stream, _)) = listener.accept() else {
+                break;
+            };
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: {}\r\n\r\n",
+                icon_clone.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.write_all(&icon_clone);
+            let _ = stream.flush();
+        }
+    });
+
+    let (app, root_id, doc) = build_views_app_with_handle();
+    let favicon_url = format!("http://127.0.0.1:{port}/icon.png");
+    let same_url = format!("http://127.0.0.1:{port}/page");
+
+    // Bookmark with same URL but deleted
+    let deleted_bm = ops::add_bookmark(&doc, &root_id, &same_url, "Deleted").unwrap();
+    ops::delete_bookmark(&doc, &deleted_bm).unwrap();
+
+    // Bookmark with a different URL (alive)
+    let different_bm =
+        ops::add_bookmark(&doc, &root_id, "https://other-site.example", "Different").unwrap();
+
+    // Create new bookmark with favicon_url
+    let encoded_url = same_url.replace(':', "%3A").replace('/', "%2F");
+    let encoded_favicon = favicon_url.replace(':', "%3A").replace('/', "%2F");
+    let body =
+        format!("folder_id={root_id}&url={encoded_url}&title=New&favicon_url={encoded_favicon}");
+    let (status, _) = post_form(app, "/bookmarks/new", &body).await;
+    assert_eq!(status, StatusCode::OK);
+
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let store: mybriefcase_bookmarks::model::BookmarkStore =
+        doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
+    assert_eq!(
+        store.bookmarks.get(&deleted_bm).unwrap().favicon,
+        None,
+        "deleted bookmarks must not receive propagated favicon"
+    );
+    assert_eq!(
+        store.bookmarks.get(&different_bm).unwrap().favicon,
+        None,
+        "bookmarks with different URLs must not receive propagated favicon"
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
 async fn update_bookmark_favicon_propagates_skips_deleted() {
     let (app, root_id, doc) = build_views_app_with_handle();
     let bm1 = ops::add_bookmark(&doc, &root_id, "https://same.com", "Live").unwrap();
