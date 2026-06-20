@@ -38,7 +38,7 @@ pub struct Bookmark {
     pub url: String,
     pub title: String,
     pub notes: String,
-    pub favicon: String,
+    pub favicon: Option<String>,
     /// RFC 3339 timestamp
     #[schemars(schema_with = "datetime_schema")]
     pub created_at: String,

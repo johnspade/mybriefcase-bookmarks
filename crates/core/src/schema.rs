@@ -62,7 +62,7 @@ pub struct BookmarkFields<'a> {
     pub url: &'a str,
     pub title: &'a str,
     pub notes: &'a str,
-    pub favicon: &'a str,
+    pub favicon: Option<&'a str>,
     pub created_at: &'a str,
     pub updated_at: &'a str,
 }
@@ -78,7 +78,10 @@ pub fn write_bookmark(
     tx.put(obj, Url.as_ref(), fields.url)?;
     tx.put(obj, Title.as_ref(), fields.title)?;
     tx.put(obj, Notes.as_ref(), fields.notes)?;
-    tx.put(obj, Favicon.as_ref(), fields.favicon)?;
+    match fields.favicon {
+        Some(fav) => tx.put(obj, Favicon.as_ref(), fav)?,
+        None => tx.put(obj, Favicon.as_ref(), automerge::ScalarValue::Null)?,
+    }
     tx.put(obj, CreatedAt.as_ref(), fields.created_at)?;
     tx.put(obj, UpdatedAt.as_ref(), fields.updated_at)?;
     tx.put(obj, Deleted.as_ref(), false)?;

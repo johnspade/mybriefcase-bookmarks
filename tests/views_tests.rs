@@ -732,7 +732,7 @@ async fn edit_bookmark_saves_favicon_field() {
     let store: mybriefcase_bookmarks::model::BookmarkStore =
         doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
     let bm = store.bookmarks.get(&bm_id).unwrap();
-    assert_eq!(bm.favicon, "abc123.png");
+    assert_eq!(bm.favicon, Some("abc123.png".to_string()));
 }
 
 #[tokio::test]
@@ -740,7 +740,7 @@ async fn edit_bookmark_saves_favicon_field() {
 async fn edit_bookmark_clears_favicon() {
     let (app, root_id, doc) = build_views_app_with_handle();
     let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
-    ops::update_favicon(&doc, &bm_id, "existing.png").unwrap();
+    ops::update_favicon(&doc, &bm_id, Some("existing.png")).unwrap();
 
     let (status, _) = post_form(
         app,
@@ -753,7 +753,7 @@ async fn edit_bookmark_clears_favicon() {
     let store: mybriefcase_bookmarks::model::BookmarkStore =
         doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
     let bm = store.bookmarks.get(&bm_id).unwrap();
-    assert_eq!(bm.favicon, "");
+    assert_eq!(bm.favicon, None);
 }
 
 #[tokio::test]
@@ -773,8 +773,14 @@ async fn edit_bookmark_favicon_propagates_to_same_url() {
 
     let store: mybriefcase_bookmarks::model::BookmarkStore =
         doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
-    assert_eq!(store.bookmarks.get(&bm1).unwrap().favicon, "new-icon.png");
-    assert_eq!(store.bookmarks.get(&bm2).unwrap().favicon, "new-icon.png");
+    assert_eq!(
+        store.bookmarks.get(&bm1).unwrap().favicon,
+        Some("new-icon.png".to_string())
+    );
+    assert_eq!(
+        store.bookmarks.get(&bm2).unwrap().favicon,
+        Some("new-icon.png".to_string())
+    );
 }
 
 #[tokio::test]
@@ -783,8 +789,8 @@ async fn edit_bookmark_favicon_delete_does_not_propagate() {
     let (app, root_id, doc) = build_views_app_with_handle();
     let bm1 = ops::add_bookmark(&doc, &root_id, "https://example.com", "One").unwrap();
     let bm2 = ops::add_bookmark(&doc, &root_id, "https://example.com", "Two").unwrap();
-    ops::update_favicon(&doc, &bm1, "shared.png").unwrap();
-    ops::update_favicon(&doc, &bm2, "shared.png").unwrap();
+    ops::update_favicon(&doc, &bm1, Some("shared.png")).unwrap();
+    ops::update_favicon(&doc, &bm2, Some("shared.png")).unwrap();
 
     let (status, _) = post_form(
         app,
@@ -796,8 +802,11 @@ async fn edit_bookmark_favicon_delete_does_not_propagate() {
 
     let store: mybriefcase_bookmarks::model::BookmarkStore =
         doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
-    assert_eq!(store.bookmarks.get(&bm1).unwrap().favicon, "");
-    assert_eq!(store.bookmarks.get(&bm2).unwrap().favicon, "shared.png");
+    assert_eq!(store.bookmarks.get(&bm1).unwrap().favicon, None);
+    assert_eq!(
+        store.bookmarks.get(&bm2).unwrap().favicon,
+        Some("shared.png".to_string())
+    );
 }
 
 #[tokio::test]
@@ -867,7 +876,7 @@ async fn fetch_favicon_endpoint_returns_partial_with_img() {
     let store: mybriefcase_bookmarks::model::BookmarkStore =
         doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
     let bm = store.bookmarks.get(bm_id).unwrap();
-    assert!(!bm.favicon.is_empty(), "favicon should be stored");
+    assert!(bm.favicon.is_some(), "favicon should be stored");
 }
 
 #[tokio::test]
@@ -893,7 +902,7 @@ async fn fetch_favicon_endpoint_error_returns_inline_message() {
 async fn edit_form_contains_favicon_section() {
     let (app, root_id, doc) = build_views_app_with_handle();
     let bm_id = ops::add_bookmark(&doc, &root_id, "https://example.com", "Test").unwrap();
-    ops::update_favicon(&doc, &bm_id, "test-icon.png").unwrap();
+    ops::update_favicon(&doc, &bm_id, Some("test-icon.png")).unwrap();
 
     let (status, html) = get_html(app, &format!("/bookmarks/{bm_id}/edit-form")).await;
     assert_eq!(status, StatusCode::OK);
@@ -1626,7 +1635,10 @@ async fn create_bookmark_data_favicon_not_fetched() {
         .values()
         .find(|b| b.title == "DataFav")
         .expect("bookmark should exist");
-    assert_eq!(bm.favicon, "", "data: favicon URLs must not trigger fetch");
+    assert_eq!(
+        bm.favicon, None,
+        "data: favicon URLs must not trigger fetch"
+    );
 }
 
 #[tokio::test]
@@ -1648,7 +1660,7 @@ async fn create_bookmark_empty_favicon_not_fetched() {
         .values()
         .find(|b| b.title == "EmptyFav")
         .expect("bookmark should exist");
-    assert_eq!(bm.favicon, "", "empty favicon_url must not trigger fetch");
+    assert_eq!(bm.favicon, None, "empty favicon_url must not trigger fetch");
 }
 
 #[tokio::test]
@@ -2175,7 +2187,7 @@ async fn create_bookmark_favicon_propagates_to_existing_same_url() {
         doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
     let existing = store.bookmarks.get(&existing_bm).unwrap();
     assert!(
-        !existing.favicon.is_empty(),
+        existing.favicon.is_some(),
         "favicon should propagate to existing bookmark with same URL"
     );
 }
@@ -2198,11 +2210,14 @@ async fn update_bookmark_favicon_propagates_skips_deleted() {
 
     let store: mybriefcase_bookmarks::model::BookmarkStore =
         doc.with_doc(|d| autosurgeon::hydrate(d).unwrap());
-    assert_eq!(store.bookmarks.get(&bm1).unwrap().favicon, "icon.png");
+    assert_eq!(
+        store.bookmarks.get(&bm1).unwrap().favicon,
+        Some("icon.png".to_string())
+    );
     // Deleted bookmark should NOT get the propagated favicon
     assert_eq!(
         store.bookmarks.get(&bm2).unwrap().favicon,
-        "",
+        None,
         "deleted bookmarks must not receive propagated favicon"
     );
 }
