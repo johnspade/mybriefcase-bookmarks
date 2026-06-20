@@ -1,7 +1,7 @@
 <div class="detail-icon-wrap">
-{% if favicon.is_empty() %}  <span class="favicon favicon-lg" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span>
-{% else %}  <img class="favicon favicon-lg" src="/favicons/{{ favicon }}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'favicon favicon-lg',textContent:'{{ domain_letter }}',style:'background:{{ domain_color }}'}))">
-{% endif %}</div>
+{% match favicon %}{% when Some with (fav) %}  <img class="favicon favicon-lg" src="/favicons/{{ fav }}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'favicon favicon-lg',textContent:'{{ domain_letter }}',style:'background:{{ domain_color }}'}))">
+{% when None %}  <span class="favicon favicon-lg" :style="'background:' + '{{ domain_color }}'">{{ domain_letter }}</span>
+{% endmatch %}</div>
 <div class="detail-title">{{ title }}</div>
 <a class="detail-url" href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
 <div class="detail-tab-bar">

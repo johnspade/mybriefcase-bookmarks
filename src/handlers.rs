@@ -131,7 +131,7 @@ struct DetailBookmarkTemplate {
     title: String,
     url: String,
     notes: String,
-    favicon: String,
+    favicon: Option<String>,
     created_at: String,
     updated_at: String,
     created_date: String,
@@ -147,7 +147,7 @@ struct EditBookmarkTemplate {
     title: String,
     url: String,
     notes: String,
-    favicon: String,
+    favicon: Option<String>,
     domain_color: String,
     domain_letter: String,
     folders: Vec<(String, String, bool)>,
@@ -172,7 +172,7 @@ struct SettingsBaseTemplate {
 #[derive(Template)]
 #[template(path = "favicon_preview.html")]
 struct FaviconPreviewTemplate {
-    favicon: String,
+    favicon: Option<String>,
     domain_color: String,
     domain_letter: String,
     error: String,
@@ -578,7 +578,7 @@ pub async fn create_bookmark_html(
                     }
                 }
                 for bm_id in &ids_to_update {
-                    let _ = ops::update_favicon(&doc_handle, bm_id, &filename);
+                    let _ = ops::update_favicon(&doc_handle, bm_id, Some(&filename));
                 }
                 let _ = crate::repo::export_doc_to_shared(
                     &doc_handle,
@@ -612,8 +612,13 @@ pub async fn update_bookmark_html(
             )?;
 
             if let Some(ref favicon) = form.favicon {
-                ops::update_favicon(doc, &id, favicon)?;
-                if !favicon.is_empty() {
+                let fav = if favicon.is_empty() {
+                    None
+                } else {
+                    Some(favicon.as_str())
+                };
+                ops::update_favicon(doc, &id, fav)?;
+                if let Some(fav_str) = fav {
                     let store: BookmarkStore = doc.with_doc(|d| {
                         autosurgeon::hydrate(d)
                             .map_err(|e| CoreError::DocumentCorrupted(e.to_string()))
@@ -622,7 +627,7 @@ pub async fn update_bookmark_html(
                         let url = bm.url.clone();
                         for (other_id, other_bm) in &store.bookmarks {
                             if other_id != &id && other_bm.url == url && !other_bm.deleted {
-                                ops::update_favicon(doc, other_id, favicon)?;
+                                ops::update_favicon(doc, other_id, Some(fav_str))?;
                             }
                         }
                     }
@@ -738,10 +743,11 @@ pub async fn fetch_favicon_html(
         }
     };
 
-    ops::update_favicon(&state.doc_handle, &id, &filename).map_err(|e| core_error_to_status(&e))?;
+    ops::update_favicon(&state.doc_handle, &id, Some(&filename))
+        .map_err(|e| core_error_to_status(&e))?;
 
     let template = FaviconPreviewTemplate {
-        favicon: filename,
+        favicon: Some(filename),
         domain_color: color,
         domain_letter: letter,
         error: String::new(),
@@ -966,18 +972,18 @@ pub async fn bookmark_history_html(
     html.push_str(r#"<div class="detail-icon-wrap">"#);
     let dc = domain_color(&bm.url);
     let dl = domain_letter(&bm.url);
-    if bm.favicon.is_empty() {
+    if let Some(ref fav) = bm.favicon {
+        let _ = write!(
+            html,
+            r#"<img class="favicon favicon-lg" src="/favicons/{fav}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{{className:'favicon favicon-lg',textContent:'{dl}',style:'background:{dc}'}}))""#,
+            fav = html_escape(fav),
+        );
+        html.push('>');
+    } else {
         let _ = write!(
             html,
             r#"<span class="favicon favicon-lg" style="background:{dc}">{dl}</span>"#,
         );
-    } else {
-        let _ = write!(
-            html,
-            r#"<img class="favicon favicon-lg" src="/favicons/{fav}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{{className:'favicon favicon-lg',textContent:'{dl}',style:'background:{dc}'}}))""#,
-            fav = html_escape(&bm.favicon),
-        );
-        html.push('>');
     }
     html.push_str("</div>");
     let _ = write!(
@@ -1300,7 +1306,7 @@ mod tests {
                     url: url.to_string(),
                     title: title.to_string(),
                     notes: String::new(),
-                    favicon: String::new(),
+                    favicon: None,
                     created_at: created.to_string(),
                     updated_at: created.to_string(),
                     deleted: false,

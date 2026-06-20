@@ -46,7 +46,7 @@ pub struct BookmarkItemView {
     pub notes: String,
     pub created_at: String,
     pub created_date: String,
-    pub favicon: String,
+    pub favicon: Option<String>,
     pub domain_color: String,
     pub domain_letter: String,
 }
@@ -352,7 +352,7 @@ mod tests {
                     url: url.to_string(),
                     title: title.to_string(),
                     notes: String::new(),
-                    favicon: String::new(),
+                    favicon: None,
                     created_at: created.to_string(),
                     updated_at: created.to_string(),
                     deleted: false,

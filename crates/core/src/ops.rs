@@ -4,7 +4,7 @@ use automerge_repo::DocHandle;
 
 use crate::error::CoreError;
 use crate::schema;
-use crate::schema::BookmarkField::{Deleted, UpdatedAt};
+use crate::schema::BookmarkField::{Deleted, Favicon, UpdatedAt};
 use crate::schema::BookmarkStoreField::{Bookmarks, Folders};
 use crate::schema::FolderField::Children;
 
@@ -76,7 +76,7 @@ pub fn add_bookmark(
                 url,
                 title,
                 notes: "",
-                favicon: "",
+                favicon: None,
                 created_at: &now,
                 updated_at: &now,
             },
@@ -106,7 +106,7 @@ pub fn add_bookmark(
 pub fn update_favicon(
     doc_handle: &DocHandle,
     bookmark_id: &str,
-    favicon: &str,
+    favicon: Option<&str>,
 ) -> Result<(), CoreError> {
     with_doc_mut_checked(doc_handle, |doc| {
         let mut tx = doc.transaction();
@@ -118,7 +118,15 @@ pub fn update_favicon(
             .get(&bookmarks, bookmark_id)?
             .ok_or_else(|| CoreError::NotFound(format!("bookmark not found: {bookmark_id}")))?
             .1;
-        schema::patch_bookmark(&mut tx, &bm, None, None, None, Some(favicon))?;
+        match favicon {
+            Some(f) => tx.put(&bm, Favicon.as_ref(), f)?,
+            None => tx.put(&bm, Favicon.as_ref(), automerge::ScalarValue::Null)?,
+        }
+        tx.put(
+            &bm,
+            UpdatedAt.as_ref(),
+            chrono::Utc::now().to_rfc3339().as_str(),
+        )?;
         tx.commit_with(commit_opts(format!("update_favicon:{bookmark_id}")));
         Ok(())
     })
@@ -483,7 +491,7 @@ fn insert_items_recursive(
                         url,
                         title,
                         notes,
-                        favicon: "",
+                        favicon: None,
                         created_at: created_at.as_deref().unwrap_or(&now),
                         updated_at: updated_at.as_deref().unwrap_or(&now),
                     },
@@ -600,8 +608,7 @@ pub fn revert_bookmark(
             .unwrap_or_default();
         let old_favicon = doc
             .get_at(&bm_obj, Favicon.as_ref(), target_heads)?
-            .map(|(v, _)| v.into_string().unwrap_or_default())
-            .unwrap_or_default();
+            .and_then(|(v, _)| v.into_string().ok());
 
         let mut tx = doc.transaction();
         schema::patch_bookmark(
@@ -610,8 +617,11 @@ pub fn revert_bookmark(
             Some(&old_url),
             Some(&old_title),
             Some(&old_notes),
-            Some(&old_favicon),
+            old_favicon.as_deref(),
         )?;
+        if old_favicon.is_none() {
+            tx.put(&bm_obj, Favicon.as_ref(), automerge::ScalarValue::Null)?;
+        }
         let short_hash = &format!("{target_hash}")[..8];
         tx.commit_with(commit_opts(format!(
             "revert_bookmark:{bookmark_id}:{short_hash}"
@@ -686,7 +696,7 @@ mod tests {
         let bm = store.bookmarks.get(&id).unwrap();
         assert_eq!(bm.url, "https://example.com");
         assert_eq!(bm.title, "Example");
-        assert_eq!(bm.favicon, "");
+        assert_eq!(bm.favicon, None);
         assert!(!bm.deleted);
     }
 
@@ -824,11 +834,11 @@ mod tests {
         let original_updated = store.bookmarks.get(&id).unwrap().updated_at.clone();
 
         std::thread::sleep(std::time::Duration::from_millis(10));
-        update_favicon(&doc, &id, "abc123.png").unwrap();
+        update_favicon(&doc, &id, Some("abc123.png")).unwrap();
 
         let store = read_store(&doc);
         let bm = store.bookmarks.get(&id).unwrap();
-        assert_eq!(bm.favicon, "abc123.png");
+        assert_eq!(bm.favicon, Some("abc123.png".to_string()));
         assert_ne!(bm.updated_at, original_updated);
     }
 
