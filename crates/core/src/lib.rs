@@ -1,3 +1,4 @@
+pub mod avatar;
 pub mod error;
 pub mod export;
 pub mod history;

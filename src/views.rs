@@ -66,33 +66,7 @@ pub fn date_short(iso: &str) -> String {
     iso.chars().take(10).collect()
 }
 
-#[must_use]
-pub fn domain_color(url: &str) -> String {
-    let colors = [
-        "#e44", "#e84", "#4a9", "#46a", "#88a", "#a48", "#49a", "#a44",
-    ];
-    let mut hash: u32 = 0;
-    for b in url.bytes() {
-        hash = u32::from(b).wrapping_add(hash.wrapping_shl(5).wrapping_sub(hash));
-    }
-    colors[(hash as usize) % colors.len()].to_owned()
-}
-
-#[must_use]
-pub fn domain_letter(url: &str) -> String {
-    let rest = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .unwrap_or(url);
-    let host = rest.split('/').next().unwrap_or("");
-    let domain = host.strip_prefix("www.").unwrap_or(host);
-    domain
-        .chars()
-        .next()
-        .unwrap_or('?')
-        .to_uppercase()
-        .to_string()
-}
+pub use mybriefcase_bookmarks_core::avatar::{domain_color, domain_letter};
 
 #[must_use]
 pub fn count_bookmarks_recursive(store: &BookmarkStore, folder: &Folder) -> usize {
