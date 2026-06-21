@@ -727,12 +727,22 @@ mod tests {
             vec![],
         );
         let html = build_sidebar_html(&store, "a");
+        let selected_div = html
+            .split("<div")
+            .find(|s| s.contains(r#"data-folder-id="a""#))
+            .expect("folder a should be in sidebar");
         assert!(
-            html.contains(r#"class="tree-item selected""#),
-            "selected folder should have 'selected' class"
+            selected_div.contains("selected"),
+            "folder 'a' should be selected"
         );
-        let selected_count = html.matches(" selected").count();
-        assert_eq!(selected_count, 1, "only one folder should be selected");
+        let unselected_div = html
+            .split("<div")
+            .find(|s| s.contains(r#"data-folder-id="b""#))
+            .expect("folder b should be in sidebar");
+        assert!(
+            !unselected_div.contains("selected"),
+            "folder 'b' should not be selected"
+        );
     }
 
     #[test]
