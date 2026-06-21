@@ -46,14 +46,14 @@ pub async fn init_repo(
         // FsStorage lost it. Rebuild from sync exports.
         let handle = repo_handle.new_document();
         merge_own_export(&handle, sync_root, client_id);
-        full_merge_pass(&handle, sync_root, client_id);
+        full_merge_pass(&handle, sync_root, client_id)?;
         write_local_doc_id(&local_id_path, &handle.document_id())?;
         Ok((repo_handle, handle))
     } else if sync_info_path.exists() {
         // New device joining an existing sync folder. Rebuild from peers.
         let handle = repo_handle.new_document();
         merge_own_export(&handle, sync_root, client_id);
-        full_merge_pass(&handle, sync_root, client_id);
+        full_merge_pass(&handle, sync_root, client_id)?;
         write_local_doc_id(&local_id_path, &handle.document_id())?;
         Ok((repo_handle, handle))
     } else {
@@ -128,9 +128,15 @@ fn write_local_doc_id(path: &Path, doc_id: &DocumentId) -> Result<(), CoreError>
     Ok(())
 }
 
-pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: &str) -> bool {
+/// # Errors
+/// Returns `CoreError::Io` if `sync_root` cannot be read.
+pub fn full_merge_pass(
+    doc_handle: &DocHandle,
+    sync_root: &Path,
+    own_client_id: &str,
+) -> Result<bool, CoreError> {
     let heads_before = doc_handle.with_doc(automerge::Automerge::get_heads);
-    for entry in std::fs::read_dir(sync_root).into_iter().flatten().flatten() {
+    for entry in std::fs::read_dir(sync_root)?.flatten() {
         let peer_dir = entry.path();
         if !peer_dir.is_dir() {
             continue;
@@ -162,7 +168,7 @@ pub fn full_merge_pass(doc_handle: &DocHandle, sync_root: &Path, own_client_id: 
         }
     }
     let heads_after = doc_handle.with_doc(automerge::Automerge::get_heads);
-    heads_before != heads_after
+    Ok(heads_before != heads_after)
 }
 
 /// # Errors
@@ -292,7 +298,7 @@ mod tests {
         std::fs::create_dir_all(&peer_store).unwrap();
         std::fs::write(peer_store.join("document.snapshot"), &local_save).unwrap();
 
-        let changed = full_merge_pass(&doc_handle, sync_root, "my-client");
+        let changed = full_merge_pass(&doc_handle, sync_root, "my-client").unwrap();
         assert!(!changed, "merge of already-known data should return false");
     }
 
@@ -311,7 +317,7 @@ mod tests {
 
         make_peer_snapshot(sync_root, "peer-a", &peer_doc);
 
-        let changed = full_merge_pass(&doc_handle, sync_root, "my-client");
+        let changed = full_merge_pass(&doc_handle, sync_root, "my-client").unwrap();
         assert!(changed, "merge of new peer data should return true");
     }
 
@@ -330,10 +336,10 @@ mod tests {
 
         make_peer_snapshot(sync_root, "peer-a", &peer_doc);
 
-        let first = full_merge_pass(&doc_handle, sync_root, "my-client");
+        let first = full_merge_pass(&doc_handle, sync_root, "my-client").unwrap();
         assert!(first);
 
-        let second = full_merge_pass(&doc_handle, sync_root, "my-client");
+        let second = full_merge_pass(&doc_handle, sync_root, "my-client").unwrap();
         assert!(!second, "second merge of same data should return false");
     }
 
@@ -352,8 +358,20 @@ mod tests {
 
         make_peer_snapshot(sync_root, "my-client", &peer_doc);
 
-        let changed = full_merge_pass(&doc_handle, sync_root, "my-client");
+        let changed = full_merge_pass(&doc_handle, sync_root, "my-client").unwrap();
         assert!(!changed, "should skip own client directory");
+    }
+
+    #[tokio::test]
+    #[cfg_attr(miri, ignore)]
+    async fn full_merge_pass_returns_error_when_sync_root_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist");
+
+        let (_rh, doc_handle) = make_doc_handle(dir.path());
+
+        let result = full_merge_pass(&doc_handle, &missing, "my-client");
+        assert!(result.is_err());
     }
 
     #[tokio::test]
