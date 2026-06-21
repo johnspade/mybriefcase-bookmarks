@@ -208,7 +208,8 @@ async fn main() {
     .await
     .expect("failed to initialize repository");
 
-    repo::full_merge_pass(&doc_handle, &cfg.sync_root, &client_id);
+    repo::full_merge_pass(&doc_handle, &cfg.sync_root, &client_id)
+        .expect("failed to read sync directory");
     let exporter = repo::Exporter::new(&cfg.sync_root, &client_id);
     exporter
         .export(&doc_handle, std::time::SystemTime::now())

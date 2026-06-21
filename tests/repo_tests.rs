@@ -87,7 +87,7 @@ async fn full_merge_pass_loads_peers() {
     .unwrap();
 
     let local = fork_doc(&base, "local");
-    let changed = repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local");
+    let changed = repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local").unwrap();
     assert!(changed);
 
     let store = hydrate_store(&local.doc_handle);
@@ -118,7 +118,7 @@ async fn full_merge_pass_skips_own_dir() {
     .unwrap();
 
     let fresh = fork_doc(&base, "my-client");
-    let changed = repo::full_merge_pass(&fresh.doc_handle, sync_root.path(), "my-client");
+    let changed = repo::full_merge_pass(&fresh.doc_handle, sync_root.path(), "my-client").unwrap();
     assert!(!changed, "Should not merge own directory");
 }
 
@@ -140,7 +140,7 @@ async fn full_merge_pass_skips_dotdirs() {
     std::fs::write(dot_dir.join("document.snapshot"), &data).unwrap();
 
     let fresh = fork_doc(&base, "local");
-    let changed = repo::full_merge_pass(&fresh.doc_handle, sync_root.path(), "local");
+    let changed = repo::full_merge_pass(&fresh.doc_handle, sync_root.path(), "local").unwrap();
     assert!(!changed, "Should not merge dot-prefixed directories");
 }
 
@@ -163,10 +163,10 @@ async fn idempotent_merge() {
     .unwrap();
 
     let local = fork_doc(&base, "local");
-    repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local");
+    repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local").unwrap();
     let store_after_first = hydrate_store(&local.doc_handle);
 
-    repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local");
+    repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local").unwrap();
     let store_after_second = hydrate_store(&local.doc_handle);
 
     assert_eq!(
@@ -200,7 +200,7 @@ async fn multi_peer_merge() {
     }
 
     let local = fork_doc(&base, "local");
-    let changed = repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local");
+    let changed = repo::full_merge_pass(&local.doc_handle, sync_root.path(), "local").unwrap();
     assert!(changed);
 
     let store = hydrate_store(&local.doc_handle);
