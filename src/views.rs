@@ -89,7 +89,11 @@ pub fn count_bookmarks_recursive(store: &BookmarkStore, folder: &Folder) -> usiz
 pub fn build_breadcrumbs(store: &BookmarkStore, folder_id: &str) -> Vec<BreadcrumbItem> {
     let mut path = Vec::new();
     let mut current = folder_id.to_owned();
-    while let Some(folder) = store.folders.get(&current) {
+    let max_depth = store.folders.len();
+    for _ in 0..max_depth {
+        let Some(folder) = store.folders.get(&current) else {
+            break;
+        };
         path.push((current.clone(), folder.title.clone()));
         if current == store.root_folder_id {
             break;
